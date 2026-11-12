@@ -7,14 +7,5 @@ siente tu PC y por qué.
 
 Todo se queda en tu PC: sin cuenta, sin nube, sin telemetría.
 
-Esta es la versión nueva, hecha de cero con Tauri. Lo que falta para que
-reemplace a la anterior está en [docs/PLAN.md](docs/PLAN.md).
-
-## Desarrollo
-
-```
-npm ci
-npm run tauri dev
-```
 
 Licencia MIT. Créditos de terceros en [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
