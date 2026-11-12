@@ -4,8 +4,9 @@
 import { useEffect, useState } from "preact/hooks";
 import {
   defenderRun, defenderStatus, firewallFix, firewallReview, privacyList, privacySet, tracesClear, tracesList,
-  type Defender, type Firewall, type SwitchState, type Trace,
+  type Defender, type Firewall, type PrivacyLevel, type SwitchState, type Trace,
 } from "../core/api";
+import { NEEDS } from "../core/advice";
 import { bytes, count } from "../core/format";
 import { language, N_, t, tn } from "../i18n/i18n";
 import { Icon } from "../ui/Icon";
@@ -156,9 +157,16 @@ const GROUP_NAMES: Record<SwitchState["group"], string> = {
   security: N_("Safer settings"),
 };
 
+const LEVELS: Record<PrivacyLevel, { label: string; chip: string; hint: string }> = {
+  recommended: { label: N_("Recommended"), chip: "ok", hint: N_("Protect it: you lose nothing you'll miss.") },
+  caution: { label: N_("Careful"), chip: "warn", hint: N_("It switches off something many people use. Read what you lose.") },
+  advanced: { label: N_("Advanced"), chip: "", hint: N_("Only if you know you don't need it.") },
+};
+
 function Switches({ groups }: { groups: SwitchState["group"][] }) {
   const [list, setList] = useState<SwitchState[] | null>(null);
   const [admin, setAdmin] = useState(false);
+  const [busy, setBusy] = useState(false);
   const load = () => void privacyList().then(setList);
   useEffect(load, []);
   if (!list) return <Working text={t("Looking…")} />;
@@ -173,15 +181,61 @@ function Switches({ groups }: { groups: SwitchState["group"][] }) {
     }
   };
   const es = language() === "es";
+  const mine = list.filter((s) => groups.includes(s.group));
+  const todo = mine.filter((s) => s.level === "recommended" && !s.on);
+  const protectRecommended = async () => {
+    setBusy(true);
+    let refused = false;
+    for (const s of todo) {
+      try {
+        await privacySet(s.id, true);
+      } catch (e) {
+        if (needsAdmin(e)) refused = true;
+      }
+    }
+    setAdmin(refused);
+    Sound.play(refused ? "error" : "pop");
+    setBusy(false);
+    load();
+  };
+  const privacy = groups.includes("telemetry");
+  const protectButton = (
+    <button class="btn filled" disabled={busy} onClick={() => void protectRecommended()}>
+      <Icon name="shield" size={20} />
+      {busy ? t("Protecting…") : t("Protect what I recommend")}
+    </button>
+  );
+  const counted = mine.filter((s) => s.group !== "security");
   return (
     <>
-      {groups.includes("telemetry") && (
-        <section class="card tool-head">
-          <div>
-            <h2 class="section-title">{tn("{n} of {total} private", "{n} of {total} private", list.filter((s) => s.on && s.group !== "security").length, { total: list.filter((s) => s.group !== "security").length })}</h2>
-            <p class="hint">{t("Each switch changes one Windows setting to its private side. Switching it back puts the exact value it had before.")}</p>
+      {privacy ? (
+        <section class="hero card compact">
+          <Tokkip size={110} state={busy ? "working" : todo.length ? "approval" : "idle"} dancing={!busy && todo.length === 0} label="Tokkip" />
+          <div class="hero-text">
+            <h1 class="display">{tn("{n} of {total} private", "{n} of {total} private", counted.filter((s) => s.on).length, { total: counted.length })}</h1>
+            <p class="lead">
+              {todo.length
+                ? tn(
+                    "{n} is one I recommend: you lose nothing you'll miss. Those marked Careful or Advanced, read first what you lose.",
+                    "{n} are ones I recommend: you lose nothing you'll miss. Those marked Careful or Advanced, read first what you lose.",
+                    todo.length,
+                  )
+                : t("Everything I recommend is already protected. The rest is up to you: each one says what you lose.")}{" "}
+              {t("Switching one back puts the exact value it had before.")}
+            </p>
+            {todo.length > 0 && <div class="actions">{protectButton}</div>}
           </div>
         </section>
+      ) : (
+        todo.length > 0 && (
+          <section class="card tool-head">
+            <div>
+              <h2 class="section-title">{tn("{n} safer setting I recommend", "{n} safer settings I recommend", todo.length)}</h2>
+              <p class="hint">{t("Switching one back puts the exact value it had before.")}</p>
+            </div>
+            <div class="actions tight">{protectButton}</div>
+          </section>
+        )
       )}
       {admin && <AdminBanner />}
       {groups.map((g) => {
@@ -193,17 +247,25 @@ function Switches({ groups }: { groups: SwitchState["group"][] }) {
               <h2 class="section-title">{t(GROUP_NAMES[g])}</h2>
             </header>
             <ul class="files">
-              {items.map((s) => (
-                <li key={s.id} class="file">
-                  <span class="file-text">
-                    <span class="file-name">
-                      {es ? s.name : s.nameEn} {s.admin && <span class="chip">{t("Administrator")}</span>}
+              {items.map((s) => {
+                const lv = LEVELS[s.level] ?? LEVELS.caution;
+                const why = s.because && NEEDS[s.because] ? t("Careful: your PC has {what}.", { what: t(NEEDS[s.because].name) }) : "";
+                return (
+                  <li key={s.id} class="file">
+                    <span class="file-text">
+                      <span class="file-name">
+                        {es ? s.name : s.nameEn} <span class={`chip ${lv.chip}`} title={t(lv.hint)}>{t(lv.label)}</span>{" "}
+                        {s.admin && <span class="chip">{t("Administrator")}</span>}
+                      </span>
+                      <span class="file-where wrap">
+                        {t("What you lose: {what}", { what: es ? s.lose : s.loseEn })} {why}
+                      </span>
+                      {s.ours && <span class="file-where">{t("Changed by Healthy PC")}</span>}
                     </span>
-                    {s.ours && <span class="file-where">{t("Changed by Healthy PC")}</span>}
-                  </span>
-                  <input type="checkbox" class="switch" checked={s.on} aria-label={es ? s.name : s.nameEn} onChange={() => void flip(s)} />
-                </li>
-              ))}
+                    <input type="checkbox" class="switch" checked={s.on} aria-label={es ? s.name : s.nameEn} onChange={() => void flip(s)} />
+                  </li>
+                );
+              })}
             </ul>
           </section>
         );

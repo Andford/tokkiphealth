@@ -9,7 +9,8 @@
 
 Several tools follow Kudu's (the folders never to touch, the checks before
 deleting, the duplicate finder's rules, the shredder's safeguards, the
-Downloads review): rewritten here in Rust, with credit in each file.
+Downloads review, the driver updates through Windows Update): rewritten here
+in Rust, with credit in each file.
 
 ```
 MIT License

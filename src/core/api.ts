@@ -618,6 +618,56 @@ export async function updateRun(id: string): Promise<boolean> {
   return invoke<boolean>("update_run", { id });
 }
 
+export type DriverPriority = "important" | "recommended" | "optional" | "careful" | "older";
+
+export interface DriverUpdate {
+  id: string;
+  device: string;
+  title: string;
+  class: string;
+  provider: string;
+  currentVersion: string;
+  currentDate: string;
+  availableDate: string;
+  size: number;
+  /** "graphics", "network", "audio", "storage", "chipset", "bluetooth", "usb", "firmware", "input", "printer", "camera" or "other". */
+  kind: string;
+  priority: DriverPriority;
+}
+
+/** What Windows Update has for this PC's drivers. Throws "scan" when it can't ask. */
+export async function driversScan(): Promise<DriverUpdate[]> {
+  if (!inApp) {
+    await wait(2200);
+    const d = (id: string, device: string, cls: string, provider: string, kind: string, priority: DriverPriority, cur: string, avail: string, size: number): DriverUpdate => ({
+      id: `${id}-0000-4000-8000-000000000000`, device, title: `${provider} - ${cls} - ${device}`, class: cls, provider, currentVersion: "", currentDate: cur, availableDate: avail, size, kind, priority,
+    });
+    return [
+      d("11111111", "Intel(R) Wi-Fi 6 AX201 160MHz", "Net", "Intel", "network", "important", "2023-02-10", "2024-08-21", 31_000_000),
+      d("22222222", "Realtek High Definition Audio", "MEDIA", "Realtek", "audio", "recommended", "2022-11-03", "2024-05-14", 54_000_000),
+      d("33333333", "Intel(R) Serial IO I2C Host Controller", "System", "Intel", "chipset", "optional", "2021-06-01", "2023-09-12", 1_200_000),
+      d("44444444", "NVIDIA GeForce RTX 3060 Laptop GPU", "Display", "NVIDIA", "graphics", "older", "2024-09-30", "2024-03-02", 690_000_000),
+    ];
+  }
+  return invoke<DriverUpdate[]>("drivers_scan");
+}
+
+export interface DriversDone {
+  installed: number;
+  failed: number;
+  reboot: boolean;
+  restorePoint: boolean;
+}
+
+/** Throws "admin" without administrator rights. */
+export async function driversInstall(ids: string[], restorePoint: boolean): Promise<DriversDone> {
+  if (!inApp) {
+    await wait(2600);
+    return { installed: ids.length, failed: 0, reboot: true, restorePoint };
+  }
+  return invoke<DriversDone>("drivers_install", { ids, restorePoint });
+}
+
 // ── Rendimiento ──────────────────────────────────────────────────────────
 
 export interface Proc {
@@ -666,6 +716,8 @@ export async function endProcess(name: string): Promise<number> {
   return invoke<number>("perf_end", { name });
 }
 
+export type Verdict = "off" | "optional" | "keep" | "never";
+
 export interface Service {
   name: string;
   display: string;
@@ -674,17 +726,34 @@ export interface Service {
   safety: "safe" | "caution" | "unsafe";
   group: string;
   noteEn: string;
+  /** What it does and what stops when it's off, in Spanish and English. */
+  what: string;
+  whatEn: string;
+  off: string;
+  offEn: string;
+  /** Tokkip's advice for this PC. */
+  verdict: Verdict;
+  /** What it's for ("printer", "bluetooth"…) and whether this PC has it. */
+  need: string | null;
+  has: boolean | null;
   was: string | null;
 }
 
-const demoServices: Service[] = [
-  ["DiagTrack", "Connected User Experiences and Telemetry", true, "auto", "safe", "telemetry", "Connected User Experiences and Telemetry"],
-  ["Fax", "Fax", false, "manual", "safe", "fax", "Fax service"],
-  ["XblGameSave", "Xbox Live Game Save", false, "manual", "caution", "xbox", "Xbox cloud saves"],
-  ["Spooler", "Print Spooler", true, "auto", "caution", "print", "Needed to print"],
-  ["WSearch", "Windows Search", true, "auto", "caution", "core", "Indexes files for search"],
-  ["Winmgmt", "Windows Management Instrumentation", true, "auto", "unsafe", "core", "Core Windows management"],
-].map(([name, display, running, start, safety, group, noteEn]) => ({ name, display, running, start, safety, group, noteEn, was: null }) as Service);
+type DemoService = [string, string, boolean, string, Service["safety"], string, string, string, string, Verdict, string | null, boolean | null];
+const demoServices: Service[] = (
+  [
+    ["DiagTrack", "Connected User Experiences and Telemetry", true, "auto", "safe", "telemetry", "Connected User Experiences and Telemetry", "Envía a Microsoft datos de uso y diagnóstico de tu PC.|Nada que vayas a notar: Windows sigue igual y manda menos datos.", "Sends usage and diagnostic data about your PC to Microsoft.|Nothing you'll notice: Windows works the same and sends less data.", "off", null, null],
+    ["Fax", "Fax", false, "manual", "safe", "fax", "Fax service", "Manda y recibe faxes con un módem.|Ya no puedes mandar faxes desde la PC.", "Sends and receives faxes with a modem.|You can't send faxes from the PC.", "off", null, null],
+    ["XblGameSave", "Xbox Live Game Save", false, "manual", "caution", "xbox", "Xbox cloud saves", "Guarda en la nube las partidas de juegos de Xbox.|Tus partidas de Xbox ya no se sincronizan.", "Saves Xbox game progress to the cloud.|Your Xbox saves stop syncing.", "off", "xbox", false],
+    ["Spooler", "Print Spooler", true, "auto", "caution", "print", "Needed to print", "Manda tus documentos a la impresora.|No puedes imprimir ni guardar como PDF con la impresora de Microsoft.", "Sends your documents to the printer.|You can't print, nor save with Microsoft Print to PDF.", "keep", "printer", true],
+    ["WSearch", "Windows Search", true, "auto", "caution", "core", "Indexes files for search", "Indexa tus archivos para que la búsqueda sea rápida.|Buscar en Inicio y en el Explorador se vuelve lento.", "Indexes your files so search is fast.|Searching in Start and Explorer gets slow.", "optional", null, null],
+    ["Winmgmt", "Windows Management Instrumentation", true, "auto", "unsafe", "core", "Core Windows management", "Le da a los programas información de la PC.|Muchos programas y Windows mismo dejan de funcionar bien.", "Gives programs information about the PC.|Many programs and Windows itself stop working right.", "never", null, null],
+  ] as DemoService[]
+).map(([name, display, running, start, safety, group, noteEn, es, en, verdict, need, has]) => {
+  const [what, off] = es.split("|");
+  const [whatEn, offEn] = en.split("|");
+  return { name, display, running, start, safety, group, noteEn, what, whatEn, off, offEn, verdict, need, has, was: null };
+});
 
 export async function servicesList(): Promise<Service[]> {
   if (!inApp) {
@@ -769,24 +838,37 @@ export async function networkFix(what: "dns" | "arp" | "reset"): Promise<boolean
 
 // ── Protección ───────────────────────────────────────────────────────────
 
+export type PrivacyLevel = "recommended" | "caution" | "advanced";
+
 export interface SwitchState {
   id: string;
   group: "telemetry" | "ads" | "search" | "sync" | "ai" | "browsers" | "security";
   name: string;
   nameEn: string;
   admin: boolean;
+  /** How freely Tokkip says to protect it, for this PC. */
+  level: PrivacyLevel;
+  /** What you lose by protecting it, in Spanish and English. */
+  lose: string;
+  loseEn: string;
+  /** What this PC has that made it a step more careful ("touch", "laptop"). */
+  because: string | null;
   on: boolean;
   ours: boolean;
 }
 
-const demoSwitches: SwitchState[] = [
-  ["advertising-id", "ads", "ID de publicidad", "Advertising ID", false, false],
-  ["tips-notifications", "ads", "Consejos y sugerencias", "Tips & Suggestions", false, true],
-  ["telemetry-level", "telemetry", "Telemetría de Windows al mínimo", "Windows Telemetry", true, false],
-  ["bing-web-search", "search", "Resultados de la web en la búsqueda", "Bing Web Results", false, false],
-  ["copilot", "ai", "Microsoft Copilot", "Microsoft Copilot", true, false],
-  ["show-extensions", "security", "Ver las extensiones de archivo", "Show file extensions", false, false],
-].map(([id, group, name, nameEn, admin, on]) => ({ id, group, name, nameEn, admin, on, ours: false }) as SwitchState);
+type DemoSwitch = [string, SwitchState["group"], string, string, boolean, boolean, PrivacyLevel, string, string, string | null];
+const demoSwitches: SwitchState[] = (
+  [
+    ["advertising-id", "ads", "ID de publicidad", "Advertising ID", false, false, "recommended", "Nada: los anuncios siguen, solo que menos personalizados.", "Nothing: ads stay, just less personalized.", null],
+    ["tips-notifications", "ads", "Consejos y sugerencias", "Tips & Suggestions", false, true, "recommended", "Nada que vayas a notar.", "Nothing you'll notice.", null],
+    ["telemetry-level", "telemetry", "Telemetría de Windows al mínimo", "Windows Telemetry", true, false, "recommended", "Nada que vayas a notar.", "Nothing you'll notice.", null],
+    ["handwriting-telemetry", "telemetry", "Datos de escritura a mano", "Handwriting data", false, false, "advanced", "Con pluma, el reconocimiento de tu letra aprende un poco menos.", "With a pen, handwriting recognition learns a bit less.", "touch"],
+    ["bing-web-search", "search", "Resultados de la web en la búsqueda", "Bing Web Results", false, false, "recommended", "Inicio ya no busca en internet; abre el navegador para eso.", "Start no longer searches the web; open the browser for that.", null],
+    ["copilot", "ai", "Microsoft Copilot", "Microsoft Copilot", true, false, "caution", "Copilot desaparece de Windows.", "Copilot goes away from Windows.", null],
+    ["show-extensions", "security", "Ver las extensiones de archivo", "Show file extensions", false, false, "recommended", "Nada: solo ves el final del nombre (.pdf, .exe).", "Nothing: you just see the end of the name (.pdf, .exe).", null],
+  ] as DemoSwitch[]
+).map(([id, group, name, nameEn, admin, on, level, lose, loseEn, because]) => ({ id, group, name, nameEn, admin, on, level, lose, loseEn, because, ours: false }));
 
 export async function privacyList(): Promise<SwitchState[]> {
   return inApp ? invoke<SwitchState[]>("privacy_list") : demoSwitches;

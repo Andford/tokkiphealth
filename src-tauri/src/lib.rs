@@ -7,6 +7,7 @@ mod fsx;
 mod health;
 mod notice;
 mod platform;
+mod profile;
 mod rules;
 mod store;
 mod tools;
@@ -565,7 +566,8 @@ async fn services_list(dirs: tauri::State<'_, Dirs>) -> Result<Vec<tools::perf::
     blocking(move || {
         let json = platform::powershell("Get-CimInstance Win32_Service | Select-Object Name, DisplayName, State, StartMode | ConvertTo-Json -Compress").unwrap_or_default();
         let changed: HashMap<String, String> = store::load_json(&data, SERVICES_FILE);
-        tools::perf::join_services(&json, &tools::perf::known_services(), &changed)
+        let profile = profile::get();
+        tools::perf::join_services(&json, &tools::perf::known_services(), &changed, profile.as_ref())
     })
     .await
 }
@@ -804,8 +806,9 @@ async fn network_fix(what: String) -> Result<bool, String> {
 const PRIVACY_FILE: &str = "privacidad.json";
 
 #[tauri::command]
-fn privacy_list(dirs: tauri::State<Dirs>) -> Vec<tools::protect::SwitchState> {
-    tools::protect::switch_states(&store::load_json(&dirs.data, PRIVACY_FILE))
+async fn privacy_list(dirs: tauri::State<'_, Dirs>) -> Result<Vec<tools::protect::SwitchState>, String> {
+    let data = dirs.data.clone();
+    blocking(move || tools::protect::switch_states(&store::load_json(&data, PRIVACY_FILE), profile::get().as_ref())).await
 }
 
 /// Turns a privacy or safety switch on, or back to what it had. Err("admin") without rights.
@@ -1051,6 +1054,43 @@ async fn restore_point_create(dirs: tauri::State<'_, Dirs>) -> Result<bool, Stri
     .await
 }
 
+/// What Windows Update offers for this PC's devices, with Tokkip's word on each.
+#[tauri::command]
+async fn drivers_scan() -> Result<Vec<tools::drivers::DriverUpdate>, String> {
+    blocking(|| platform::powershell(tools::drivers::SCAN).map(|out| tools::drivers::parse_scan(&out)).ok_or_else(|| "scan".to_string()))
+        .await?
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriversDone {
+    #[serde(flatten)]
+    result: tools::drivers::Installed,
+    /// Whether the restore point asked for was made first.
+    restore_point: bool,
+}
+
+/// Installs the chosen driver updates (administrator), after a restore point if asked.
+#[tauri::command]
+async fn drivers_install(dirs: tauri::State<'_, Dirs>, ids: Vec<String>, restore_point: bool) -> Result<DriversDone, String> {
+    if !platform::is_elevated() {
+        return Err("admin".into());
+    }
+    let script = tools::drivers::install_script(&ids).ok_or("ids")?;
+    let data = dirs.data.clone();
+    blocking(move || {
+        let made = restore_point
+            && platform::powershell("Checkpoint-Computer -Description 'Tokkip Healthy PC: before drivers' -RestorePointType DEVICE_DRIVER_INSTALL -ErrorAction Stop").is_some();
+        if made {
+            act(&data, "restorePoint", "", 0, 1);
+        }
+        let result = platform::powershell(&script).and_then(|out| tools::drivers::parse_install(&out)).ok_or("install")?;
+        act(&data, "drivers", "", 0, u64::from(result.installed));
+        Ok(DriversDone { result, restore_point: made })
+    })
+    .await?
+}
+
 /// Opens Windows' System Restore, where a point is chosen and applied.
 #[tauri::command]
 fn restore_open() {
@@ -1214,6 +1254,8 @@ pub fn run() {
             restore_points,
             restore_point_create,
             restore_open,
+            drivers_scan,
+            drivers_install,
             activity_list,
             routine_get,
             routine_set,

@@ -74,12 +74,12 @@ Cada fase termina con una versión instalable.
 - [x] Búsqueda de restos después de desinstalar (carpetas y claves que quedan).
 - [x] Quitar bloatware (apps preinstaladas de Windows, con lista curada).
 - [x] Actualizaciones de programas (winget).
-- [ ] Actualizaciones de controladores.
+- [x] Actualizaciones de controladores (Windows Update, con prioridad y punto de restauración).
 - [ ] Menú contextual: entradas viejas o rotas.
 
 ### Fase 4 — Rendimiento (0.8)
 - [x] Monitor: CPU, memoria, disco, red, temperaturas, procesos.
-- [x] Servicios de Windows con recomendaciones seguras.
+- [x] Servicios de Windows con recomendaciones seguras, a la medida de lo que tiene tu PC.
 - [x] Modo juego (pausa lo que estorba mientras juegas).
 - [x] Red: caché DNS, reinicio de la pila de red.
 
@@ -87,7 +87,7 @@ Cada fase termina con una versión instalable.
 - [x] Antivirus con Windows Defender: estado, escaneo rápido, definiciones y lo que encontró.
 - [ ] Heurísticas propias y reglas YARA.
 - [x] Privacidad: rastros (recientes, historial de ejecución), telemetría de
-      Windows con interruptores explicados.
+      Windows con interruptores explicados, con nivel y qué pierdes.
 - [x] Firewall: perfiles apagados y reglas de programas que ya no están.
 - [x] Endurecimiento del sistema (opciones de seguridad recomendadas).
 

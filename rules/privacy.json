@@ -1,5 +1,5 @@
 {
- "_about": "Privacy and safety switches: each sets one registry DWORD to its private (or safer) value; Healthy PC remembers the value it had and puts it back. Telemetry, ads, search, sync, AI and browser entries come from Kudu's Privacy Shield (MIT, Advent Development); the security ones are ours.",
+ "_about": "Privacy and safety switches: each sets one registry DWORD to its private (or safer) value; Healthy PC remembers the value it had and puts it back. Telemetry, ads, search, sync, AI and browser entries come from Kudu's Privacy Shield (MIT, Advent Development); the security ones are ours. Ours: level (how freely Tokkip says to protect it), needs (one step up when the PC has it) and loseEn (what you lose; Spanish in src/i18n/es.json).",
  "switches": [
   {
    "id": "telemetry-level",
@@ -9,7 +9,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
    "value": "AllowTelemetry",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "activity-history",
@@ -19,7 +22,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
    "value": "EnableActivityFeed",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "The cross-device \"recent activity\" list.",
+   "lose": "La lista de \"actividad reciente\" entre tus equipos."
   },
   {
    "id": "publish-activity",
@@ -29,7 +35,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
    "value": "PublishUserActivities",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "feedback-frequency",
@@ -39,7 +48,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules",
    "value": "NumberOfSIUFInPeriod",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing: the surveys just stop.",
+   "lose": "Nada: solo dejan de salir las encuestas."
   },
   {
    "id": "handwriting-telemetry",
@@ -49,7 +61,11 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Input\\TIPC",
    "value": "Enabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "needs": "touch",
+   "loseEn": "With a pen, handwriting recognition learns a bit less.",
+   "lose": "Con pluma, el reconocimiento de tu letra aprende un poco menos."
   },
   {
    "id": "input-personalization",
@@ -59,7 +75,11 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Personalization\\Settings",
    "value": "AcceptedPrivacyPolicy",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "needs": "touch",
+   "loseEn": "Keyboard and pen suggestions get less personal.",
+   "lose": "Las sugerencias del teclado y de la pluma se personalizan menos."
   },
   {
    "id": "tailored-experiences",
@@ -69,7 +89,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy",
    "value": "TailoredExperiencesWithDiagnosticDataEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "app-launch-tracking",
@@ -79,7 +102,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
    "value": "Start_TrackProgs",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Start no longer shows \"most used\".",
+   "lose": "Inicio ya no muestra \"más usadas\"."
   },
   {
    "id": "advertising-id",
@@ -89,7 +115,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo",
    "value": "Enabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing: ads stay, they just stop following you.",
+   "lose": "Nada: los anuncios siguen, pero no te siguen a ti."
   },
   {
    "id": "suggested-content",
@@ -99,7 +128,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
    "value": "SubscribedContent-338393Enabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing you'll miss.",
+   "lose": "Nada que vayas a extrañar."
   },
   {
    "id": "tips-notifications",
@@ -109,7 +141,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
    "value": "SubscribedContent-338389Enabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Windows' tips.",
+   "lose": "Los tips de Windows."
   },
   {
    "id": "start-suggestions",
@@ -119,7 +154,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
    "value": "SystemPaneSuggestionsEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing you'll miss.",
+   "lose": "Nada que vayas a extrañar."
   },
   {
    "id": "lock-screen-spotlight",
@@ -129,7 +167,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
    "value": "RotatingLockScreenEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "The rotating lock screen photos.",
+   "lose": "Las fotos que cambian solas en la pantalla de bloqueo."
   },
   {
    "id": "silently-installed-apps",
@@ -139,7 +180,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
    "value": "SilentInstalledAppsEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing: you decide what gets installed.",
+   "lose": "Nada: tú decides qué se instala."
   },
   {
    "id": "preinstalled-apps",
@@ -149,7 +193,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
    "value": "PreInstalledAppsEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing you'll miss.",
+   "lose": "Nada que vayas a extrañar."
   },
   {
    "id": "bing-start-menu",
@@ -159,7 +206,10 @@
    "key": "HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
    "value": "DisableSearchBoxSuggestions",
    "private": 1,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Web results stop showing in Start search.",
+   "lose": "Ya no salen resultados de internet al buscar en Inicio."
   },
   {
    "id": "bing-web-search",
@@ -169,7 +219,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search",
    "value": "BingSearchEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Web results stop showing in search.",
+   "lose": "Ya no salen resultados de internet en la búsqueda."
   },
   {
    "id": "cortana",
@@ -179,7 +232,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search",
    "value": "AllowCortana",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Cortana (almost nobody uses it now).",
+   "lose": "Cortana (casi nadie la usa ya)."
   },
   {
    "id": "search-highlights",
@@ -189,7 +245,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings",
    "value": "IsDynamicSearchBoxEnabled",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "The daily trivia in search.",
+   "lose": "Las curiosidades del día en la búsqueda."
   },
   {
    "id": "store-search-suggestions",
@@ -199,7 +258,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsStore",
    "value": "DisableStoreSearchSuggestions",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Suggestions while searching the Store.",
+   "lose": "Las sugerencias al buscar en la Store."
   },
   {
    "id": "clipboard-sync",
@@ -209,7 +271,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
    "value": "AllowCrossDeviceClipboard",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "Copying on one PC and pasting on another (or your phone with SwiftKey).",
+   "lose": "Copiar en una PC y pegar en otra (o en tu teléfono con SwiftKey)."
   },
   {
    "id": "clipboard-history",
@@ -219,7 +284,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Clipboard",
    "value": "EnableClipboardHistory",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "caution",
+   "loseEn": "Win + V with what you copied before. Many people use it.",
+   "lose": "Win + V con lo que copiaste antes. Mucha gente lo usa."
   },
   {
    "id": "settings-sync",
@@ -229,7 +297,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync",
    "value": "DisableSettingSync",
    "private": 2,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "On a new PC you'll set everything up again.",
+   "lose": "En una PC nueva tendrás que configurar todo otra vez."
   },
   {
    "id": "find-my-device",
@@ -239,7 +310,11 @@
    "key": "HKLM\\SOFTWARE\\Microsoft\\MdmCommon\\SettingValues",
    "value": "LocationSyncEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "needs": "laptop",
+   "loseEn": "If your laptop is lost or stolen, you can't locate or lock it.",
+   "lose": "Si pierdes o te roban la laptop, no podrás ubicarla ni bloquearla."
   },
   {
    "id": "delivery-optimization",
@@ -249,7 +324,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization",
    "value": "DODownloadMode",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Updates come only from Microsoft; at home you'll barely notice.",
+   "lose": "Las actualizaciones llegan solo de Microsoft; en casa casi no se nota."
   },
   {
    "id": "copilot",
@@ -259,7 +337,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot",
    "value": "TurnOffWindowsCopilot",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "Copilot in Windows, if you use it.",
+   "lose": "Copilot en Windows, si lo usas."
   },
   {
    "id": "windows-recall",
@@ -269,7 +350,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
    "value": "DisableAIDataAnalysis",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Searching your screen history. In exchange, nothing sensitive is kept.",
+   "lose": "Buscar en tu historial de pantallas. A cambio, nada sensible queda guardado."
   },
   {
    "id": "click-to-do",
@@ -279,7 +363,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
    "value": "DisableClickToDo",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "AI actions on text and images on screen.",
+   "lose": "Las acciones con IA sobre texto e imágenes en pantalla."
   },
   {
    "id": "paint-ai",
@@ -289,7 +376,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Paint",
    "value": "DisableCocreator",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "Creating images with AI in Paint.",
+   "lose": "Crear imágenes con IA en Paint."
   },
   {
    "id": "notepad-ai",
@@ -299,7 +389,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsNotepad",
    "value": "DisableAIFeatures",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "Rewriting with AI in Notepad.",
+   "lose": "Reescribir con IA en el Bloc de notas."
   },
   {
    "id": "edge-ai-features",
@@ -309,7 +402,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "ComposeInlineEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "Writing or rewriting text with AI in Edge.",
+   "lose": "Escribir o reescribir textos con IA en Edge."
   },
   {
    "id": "edge-metrics",
@@ -319,7 +415,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "MetricsReportingEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "edge-site-info",
@@ -329,7 +428,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "SendSiteInfoToImproveServices",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "edge-personalization",
@@ -339,7 +441,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "PersonalizationReportingEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Edge's news and ads stop being tailored.",
+   "lose": "Las noticias y anuncios de Edge dejan de ser a tu medida."
   },
   {
    "id": "edge-copilot-page",
@@ -349,7 +454,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "CopilotPageContext",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Asking Copilot to summarize the page you're on.",
+   "lose": "Pedirle a Copilot que resuma la página que estás viendo."
   },
   {
    "id": "edge-sidebar",
@@ -359,7 +467,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "HubsSidebarEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "The sidebar with Copilot and tools, if you use it.",
+   "lose": "La barra lateral con Copilot y herramientas, si la usas."
   },
   {
    "id": "edge-shopping",
@@ -369,7 +480,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge",
    "value": "EdgeShoppingAssistantEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Coupons and price comparisons.",
+   "lose": "Los cupones y comparaciones de precios."
   },
   {
    "id": "chrome-metrics",
@@ -379,7 +493,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Google\\Chrome",
    "value": "MetricsReportingEnabled",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "chrome-feedback",
@@ -389,7 +506,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Google\\Chrome",
    "value": "UserFeedbackAllowed",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Sending feedback to Google from Chrome.",
+   "lose": "Mandarle comentarios a Google desde Chrome."
   },
   {
    "id": "firefox-telemetry",
@@ -399,7 +519,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox",
    "value": "DisableTelemetry",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing you'll notice.",
+   "lose": "Nada que vayas a notar."
   },
   {
    "id": "show-extensions",
@@ -409,7 +532,10 @@
    "key": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
    "value": "HideFileExt",
    "private": 0,
-   "admin": false
+   "admin": false,
+   "level": "recommended",
+   "loseEn": "Nothing: you just see what kind of file each one really is.",
+   "lose": "Nada: solo ves de qué tipo es de verdad cada archivo."
   },
   {
    "id": "autorun-off",
@@ -419,7 +545,10 @@
    "key": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer",
    "value": "NoDriveTypeAutoRun",
    "private": 255,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "USB drives and discs no longer start programs by themselves.",
+   "lose": "Las memorias USB y los discos ya no abren programas solos."
   },
   {
    "id": "remote-assistance-off",
@@ -429,7 +558,10 @@
    "key": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Remote Assistance",
    "value": "fAllowToGetHelp",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Windows' old Remote Assistance invitations (Quick Assist still works).",
+   "lose": "Las invitaciones de la vieja Asistencia remota (Asistencia rápida sigue funcionando)."
   },
   {
    "id": "llmnr-off",
@@ -439,7 +571,10 @@
    "key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient",
    "value": "EnableMulticast",
    "private": 0,
-   "admin": true
+   "admin": true,
+   "level": "caution",
+   "loseEn": "Some old devices on your network may only be found by their address.",
+   "lose": "Algunos aparatos viejos de tu red quizá solo se encuentren por su dirección."
   },
   {
    "id": "uac-secure-desktop",
@@ -449,7 +584,10 @@
    "key": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
    "value": "PromptOnSecureDesktop",
    "private": 1,
-   "admin": true
+   "admin": true,
+   "level": "recommended",
+   "loseEn": "Nothing: the administrator prompt dims the screen again, as Windows intends.",
+   "lose": "Nada: el aviso de administrador vuelve a oscurecer la pantalla, como Windows lo pensó."
   }
  ]
 }

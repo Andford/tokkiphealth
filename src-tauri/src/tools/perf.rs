@@ -144,6 +144,21 @@ pub struct Known {
     pub safety: String,
     pub group: String,
     pub note_en: String,
+    /// What it does and what stops if it's off, in Spanish and English.
+    #[serde(default)]
+    pub what: String,
+    #[serde(default)]
+    pub what_en: String,
+    #[serde(default)]
+    pub off: String,
+    #[serde(default)]
+    pub off_en: String,
+    /// Only needed when the PC has this ("printer", "bluetooth"…, see profile.rs).
+    #[serde(default)]
+    pub needs: Option<String>,
+    /// Without it, still only "your call" (SysMain on an SSD).
+    #[serde(default)]
+    pub soft_without: bool,
 }
 
 #[derive(Deserialize)]
@@ -176,12 +191,25 @@ pub struct Service {
     pub safety: String,
     pub group: String,
     pub note_en: String,
+    pub what: String,
+    pub what_en: String,
+    pub off: String,
+    pub off_en: String,
+    /// Tokkip's advice for this PC (advice.rs): "off", "optional", "keep" or "never".
+    pub verdict: String,
+    pub need: Option<String>,
+    pub has: Option<bool>,
     /// The start type it had before Healthy PC changed it, if it did.
     pub was: Option<String>,
 }
 
 /// Joins what Windows reports (JSON from Win32_Service) with what we know.
-pub fn join_services(json: &str, known: &HashMap<String, Known>, changed: &HashMap<String, String>) -> Vec<Service> {
+pub fn join_services(
+    json: &str,
+    known: &HashMap<String, Known>,
+    changed: &HashMap<String, String>,
+    profile: Option<&crate::profile::PcProfile>,
+) -> Vec<Service> {
     let v: serde_json::Value = serde_json::from_str(json.trim()).unwrap_or(serde_json::Value::Null);
     let items = match v {
         serde_json::Value::Array(a) => a,
@@ -193,6 +221,7 @@ pub fn join_services(json: &str, known: &HashMap<String, Known>, changed: &HashM
         .filter_map(|i| {
             let name = i["Name"].as_str()?.to_string();
             let k = known.get(&service_key(&name))?;
+            let advice = super::advice::advise_service(&k.safety, k.needs.as_deref(), k.soft_without, profile);
             Some(Service {
                 display: i["DisplayName"].as_str().unwrap_or(&name).to_string(),
                 running: i["State"].as_str() == Some("Running"),
@@ -200,6 +229,13 @@ pub fn join_services(json: &str, known: &HashMap<String, Known>, changed: &HashM
                 safety: k.safety.clone(),
                 group: k.group.clone(),
                 note_en: k.note_en.clone(),
+                what: k.what.clone(),
+                what_en: k.what_en.clone(),
+                off: k.off.clone(),
+                off_en: k.off_en.clone(),
+                verdict: advice.verdict,
+                need: advice.need,
+                has: advice.has,
                 was: changed.get(&name.to_lowercase()).cloned(),
                 name,
             })
@@ -251,12 +287,25 @@ mod tests {
                        {"Name":"Unknown1","DisplayName":"x","State":"Stopped","StartMode":"Manual"}]"#;
         let mut changed = HashMap::new();
         changed.insert("diagtrack".to_string(), "auto".to_string());
-        let s = join_services(json, &known, &changed);
+        let s = join_services(json, &known, &changed, None);
         assert_eq!(s.len(), 1, "only services we know something about");
         assert_eq!((s[0].running, s[0].start.as_str(), s[0].was.as_deref()), (true, "auto", Some("auto")));
-        assert_eq!(join_services("{\"Name\":\"DiagTrack\",\"State\":\"Stopped\",\"StartMode\":\"Disabled\"}", &known, &HashMap::new()).len(), 1);
+        assert_eq!(join_services("{\"Name\":\"DiagTrack\",\"State\":\"Stopped\",\"StartMode\":\"Disabled\"}", &known, &HashMap::new(), None).len(), 1);
         assert!(!safe_service_name("a b"));
         assert_eq!(sc_start("manual"), Some("demand"));
+    }
+
+    #[test]
+    fn every_service_says_what_it_does_in_both_languages() {
+        for (key, k) in known_services() {
+            for text in [&k.what, &k.what_en, &k.off, &k.off_en] {
+                assert!(!text.trim().is_empty(), "{key}");
+            }
+            assert!(["safe", "caution", "unsafe"].contains(&k.safety.as_str()), "{key}");
+            if let Some(n) = &k.needs {
+                assert!(!crate::profile::PcProfile::default().has(n), "unknown need {n} in {key}");
+            }
+        }
     }
 
 

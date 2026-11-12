@@ -4,8 +4,9 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   endProcess, gameConfig, gameConfigSet, gameOff, gameOn, gameStatus, health, networkFix, onGame, perfSample, relaunchAdmin, serviceSet, servicesList,
-  type GameConfig, type GameOption, type GameSnapshot, type Sample, type Service,
+  type GameConfig, type GameOption, type GameSnapshot, type Sample, type Service, type Verdict,
 } from "../core/api";
+import { listOf, NEEDS, needSays } from "../core/advice";
 import { bytes } from "../core/format";
 import { language, N_, t, tn } from "../i18n/i18n";
 import { Icon } from "../ui/Icon";
@@ -228,17 +229,22 @@ const SVC_GROUPS: Record<string, string> = {
   developer: N_("For developers"),
   core: N_("Part of Windows itself"),
   security: N_("Keeps your PC safe"),
+  "hyper-v": N_("For Hyper-V and virtual machines"),
   misc: N_("Windows extras"),
 };
-const SAFETY: Record<Service["safety"], string> = {
-  safe: N_("Safe to switch off"),
-  caution: N_("Switch off only if you don't use it"),
-  unsafe: N_("Leave it on"),
+const VERDICT: Record<Verdict, { label: string; chip: string; icon: IconName }> = {
+  off: { label: N_("Switch it off"), chip: "ok", icon: "settings" },
+  optional: { label: N_("Your call"), chip: "warn", icon: "settings" },
+  keep: { label: N_("Keep it"), chip: "", icon: "check" },
+  never: { label: N_("Don't touch it"), chip: "", icon: "lock" },
 };
+const ORDER: Verdict[] = ["off", "optional", "keep", "never"];
 
 function Services() {
   const [list, setList] = useState<Service[] | null>(null);
   const [admin, setAdmin] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const load = () => void servicesList().then(setList);
   useEffect(load, []);
   useEffect(() => {
@@ -257,13 +263,57 @@ function Services() {
       Sound.play("error");
     }
   };
+  const en = language() === "en";
+  const off = (s: Service) => s.start === "disabled";
+  const suggested = list.filter((s) => s.verdict === "off" && !off(s));
+  const count = (v: Verdict) => list.filter((s) => s.verdict === v).length;
+  const alreadyOff = list.filter((s) => s.verdict === "off" && off(s)).length;
+  const knowsPc = list.some((s) => s.has !== null);
+  const missing = [...new Set(list.filter((s) => s.has === false && s.need && NEEDS[s.need]).map((s) => s.need!))].map((n) => t(NEEDS[n].name));
+  const sorted = [...list].sort((a, b) => ORDER.indexOf(a.verdict) - ORDER.indexOf(b.verdict) || a.display.localeCompare(b.display));
+
+  const switchOffSuggested = async () => {
+    setBusy(true);
+    try {
+      for (const s of suggested) await serviceSet(s, "disabled");
+      Sound.play("pop");
+    } catch (e) {
+      if (String(e).includes("admin")) setNeedAdmin(true);
+      Sound.play("error");
+    }
+    setBusy(false);
+    load();
+  };
 
   return (
     <>
-      <section class="card tool-head">
-        <div>
-          <h2 class="section-title">{t("Windows services")}</h2>
-          <p class="hint">{t("Programs Windows runs in the background. These are the ones worth knowing about; switching one off stops it and keeps it from starting. Whatever you change can be put back as it was.")}</p>
+      <section class="hero card compact">
+        <Tokkip size={110} state={busy ? "working" : suggested.length ? "approval" : "idle"} dancing={!busy && suggested.length === 0} label="Tokkip" />
+        <div class="hero-text">
+          <h1 class="display">{tn("I checked {n} service", "I checked {n} services", list.length)}</h1>
+          <p class="lead">
+            {t("{off} you can switch off without fear, {optional} depend on what you use and {never} belong to Windows: don't touch those.", {
+              off: count("off"),
+              optional: count("optional") + count("keep"),
+              never: count("never"),
+            })}{" "}
+            {!knowsPc
+              ? t("I couldn't see what your PC has, so I only suggest what's safe on any PC.")
+              : missing.length
+                ? t("I looked at what your PC has: I didn't find {list}, so what goes with that can go too.", { list: listOf(missing) })
+                : t("I looked at what your PC has so you don't switch off anything you use.")}{" "}
+            {alreadyOff > 0 && tn("{n} you didn't need is already off. Nice!", "{n} you didn't need are already off. Nice!", alreadyOff)}
+          </p>
+          <div class="actions">
+            {suggested.length > 0 ? (
+              <button class="btn filled" disabled={!admin || busy} onClick={() => void switchOffSuggested()}>
+                <Icon name="check" size={20} />
+                {busy ? t("Switching off…") : tn("Switch off the one I suggest", "Switch off the {n} I suggest", suggested.length)}
+              </button>
+            ) : (
+              <p class="lead">{t("I don't see anything else worth switching off.")}</p>
+            )}
+          </div>
         </div>
       </section>
       {(needAdmin || !admin) && (
@@ -275,33 +325,54 @@ function Services() {
           </button>
         </div>
       )}
+      <p class="hint pad">{t("Switching services off saves a little: don't expect your PC to fly. If something stops working, put it back here.")}</p>
       <section class="card list-card">
         <ul class="files">
-          {list.map((s) => (
-            <li key={s.name} class="file">
-              <span class={`file-icon safety-${s.safety}`}>
-                <Icon name={s.safety === "unsafe" ? "lock" : "settings"} size={20} />
-              </span>
-              <span class="file-text">
-                <span class="file-name">
-                  {s.display} <span class={`chip ${s.safety === "safe" ? "ok" : s.safety === "caution" ? "warn" : ""}`}>{t(SAFETY[s.safety])}</span>
+          {sorted.map((s) => {
+            const v = VERDICT[s.verdict];
+            const shown = open === s.name;
+            const says = needSays(s.need, s.has);
+            return (
+              <li key={s.name} class="file advice">
+                <span class={`file-icon verdict-${s.verdict}`}>
+                  <Icon name={v.icon} size={20} />
                 </span>
-                <span class="file-where">
-                  {language() === "en" && s.noteEn ? s.noteEn : t(SVC_GROUPS[s.group] ?? "Windows extras")} · {s.running ? t("Running") : t("Stopped")} ·{" "}
-                  {s.start === "disabled" ? t("Off") : s.start === "auto" ? t("Starts with Windows") : t("Starts when needed")}
+                <span class="file-text">
+                  <button class="file-name link-like" aria-expanded={shown} onClick={() => setOpen(shown ? null : s.name)}>
+                    {s.display} <span class={`chip ${v.chip}`}>{t(v.label)}</span>
+                    <Icon name="chevronDown" size={18} class={shown ? "turned" : ""} />
+                  </button>
+                  <span class="file-where">
+                    {en && s.noteEn ? s.noteEn : t(SVC_GROUPS[s.group] ?? "Windows extras")} · {s.running ? t("Running") : t("Stopped")} ·{" "}
+                    {off(s) ? t("Off") : s.start === "auto" ? t("Starts with Windows") : t("Starts when needed")}
+                  </span>
+                  {shown && (
+                    <dl class="advice-more">
+                      <dt>{t("What it does")}</dt>
+                      <dd>{en ? s.whatEn : s.what}</dd>
+                      <dt>{t("If you switch it off")}</dt>
+                      <dd>{en ? s.offEn : s.off}</dd>
+                      {says && (
+                        <>
+                          <dt>{t("On your PC")}</dt>
+                          <dd>{says}</dd>
+                        </>
+                      )}
+                    </dl>
+                  )}
                 </span>
-              </span>
-              {s.was && s.was !== s.start ? (
-                <button class="btn tonal small" disabled={!admin} onClick={() => void set(s, s.was!)}>
-                  {t("Put back")}
-                </button>
-              ) : s.start !== "disabled" && s.safety !== "unsafe" ? (
-                <button class="btn tonal small" disabled={!admin} onClick={() => void set(s, "disabled")}>
-                  {t("Switch off")}
-                </button>
-              ) : null}
-            </li>
-          ))}
+                {s.was && s.was !== s.start ? (
+                  <button class="btn tonal small" disabled={!admin || busy} onClick={() => void set(s, s.was!)}>
+                    {t("Put back")}
+                  </button>
+                ) : !off(s) && s.verdict !== "never" ? (
+                  <button class="btn tonal small" disabled={!admin || busy} onClick={() => void set(s, "disabled")}>
+                    {t("Switch off")}
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </section>
     </>

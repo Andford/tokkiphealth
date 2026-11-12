@@ -23,6 +23,21 @@ pub struct Switch {
     pub value: String,
     pub private: u32,
     pub admin: bool,
+    /// How freely Tokkip says to protect it: "recommended", "caution" or "advanced".
+    #[serde(default = "caution")]
+    pub level: String,
+    /// One step up when the PC has this ("touch", "laptop"; see advice.rs).
+    #[serde(default, skip_serializing)]
+    pub needs: Option<String>,
+    /// What you lose by protecting it, in Spanish and English.
+    #[serde(default)]
+    pub lose: String,
+    #[serde(default)]
+    pub lose_en: String,
+}
+
+fn caution() -> String {
+    "caution".into()
 }
 
 #[derive(Deserialize)]
@@ -43,6 +58,8 @@ pub struct SwitchState {
     pub on: bool,
     /// Healthy PC changed it and can put it back.
     pub ours: bool,
+    /// What this PC has that moved its level up, if anything.
+    pub because: Option<String>,
 }
 
 /// "HKLM\SOFTWARE\x" → (machine?, "SOFTWARE\x").
@@ -92,14 +109,16 @@ pub mod reg {
     }
 }
 
-pub fn switch_states(before: &Before) -> Vec<SwitchState> {
+pub fn switch_states(before: &Before, profile: Option<&crate::profile::PcProfile>) -> Vec<SwitchState> {
     switches()
         .into_iter()
-        .filter_map(|s| {
+        .filter_map(|mut s| {
             let (machine, key) = split_key(&s.key)?;
             let on = reg::get(machine, key, &s.value) == Some(s.private);
             let ours = before.contains_key(&s.id);
-            Some(SwitchState { switch: s, on, ours })
+            let (level, because) = super::advice::privacy_level(&s.level, s.needs.as_deref(), profile);
+            s.level = level;
+            Some(SwitchState { switch: s, on, ours, because })
         })
         .collect()
 }
@@ -329,6 +348,8 @@ mod tests {
         for s in &all {
             let (machine, _) = split_key(&s.key).unwrap_or_else(|| panic!("{}", s.id));
             assert_eq!(machine, s.admin, "{}", s.id);
+            assert!(!s.lose.trim().is_empty() && !s.lose_en.trim().is_empty(), "{}", s.id);
+            assert!(["recommended", "caution", "advanced"].contains(&s.level.as_str()), "{}", s.id);
         }
         let mut ids: Vec<_> = all.iter().map(|s| &s.id).collect();
         ids.sort();

@@ -1,345 +1,979 @@
 {
- "_about": "Windows services and whether switching them off is safe, caution or unsafe. From Kudu (MIT, Advent Development), src/shared/service-safety-kb.ts.",
+ "_about": "Windows services and whether switching them off is safe, caution or unsafe. From Kudu (MIT, Advent Development), src/shared/service-safety-kb.ts. Ours: whatEn/offEn (Tokkip's words, Spanish in src/i18n/es.json), needs (what the PC must have for it to matter, see src-tauri/src/profile.rs) and softWithout.",
  "services": {
+  "audioendpointbuilder": {
+   "safety": "unsafe",
+   "group": "core",
+   "noteEn": "Windows Audio Endpoint Builder \u2014 all sound devices",
+   "whatEn": "Recognizes speakers, headphones and mics.",
+   "what": "Reconoce bocinas, aud\u00edfonos y micr\u00f3fonos.",
+   "offEn": "No sound at all. Never turn it off.",
+   "off": "Te quedas sin sonido. Nunca lo apagues."
+  },
+  "audiosrv": {
+   "safety": "unsafe",
+   "group": "core",
+   "noteEn": "Windows Audio \u2014 all sound",
+   "whatEn": "All of Windows' sound.",
+   "what": "Todo el sonido de Windows.",
+   "offEn": "No sound at all. Never turn it off.",
+   "off": "Te quedas sin sonido. Nunca lo apagues."
+  },
+  "bcastdvruserservice": {
+   "safety": "caution",
+   "group": "xbox",
+   "noteEn": "Game DVR and Broadcast \u2014 Game Bar recording",
+   "needs": "xbox",
+   "whatEn": "Records and streams clips with the Game Bar (Win + G).",
+   "what": "Graba y transmite clips con la Barra de juego (Win + G).",
+   "offEn": "You can't record clips or stream from the Game Bar.",
+   "off": "Ya no podr\u00e1s grabar clips ni transmitir desde la Barra de juego."
+  },
+  "bdesvc": {
+   "safety": "unsafe",
+   "group": "security",
+   "noteEn": "BitLocker Drive Encryption",
+   "whatEn": "BitLocker: your disk encryption.",
+   "what": "BitLocker: el cifrado de tus discos.",
+   "offEn": "Encrypted drives may ask for the recovery key or not open.",
+   "off": "Tus discos cifrados pueden pedir la clave de recuperaci\u00f3n o no abrir."
+  },
   "bfe": {
    "safety": "unsafe",
    "group": "security",
-   "noteEn": "Base Filtering Engine \u2014 required by firewall"
+   "noteEn": "Base Filtering Engine \u2014 required by firewall",
+   "whatEn": "The base of the firewall and VPNs.",
+   "what": "La base del firewall y de las VPN.",
+   "offEn": "The firewall and VPNs stop working.",
+   "off": "El firewall y las VPN dejan de funcionar."
   },
   "bits": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Background Intelligent Transfer \u2014 used by Windows Update"
+   "noteEn": "Background Intelligent Transfer \u2014 used by Windows Update",
+   "whatEn": "Background downloads for Windows Update and the Store.",
+   "what": "Descargas en segundo plano para Windows Update y la Store.",
+   "offEn": "Updates can't download.",
+   "off": "Las actualizaciones no se descargan."
   },
   "bthavctpsvc": {
    "safety": "caution",
    "group": "bluetooth",
-   "noteEn": "AVCTP service for Bluetooth audio"
+   "noteEn": "AVCTP service for Bluetooth audio",
+   "needs": "bluetooth",
+   "whatEn": "Music buttons on Bluetooth headphones and speakers.",
+   "what": "Los botones de m\u00fasica en aud\u00edfonos y bocinas Bluetooth.",
+   "offEn": "Pausing or skipping from your headphones may stop working.",
+   "off": "Pausar o cambiar de canci\u00f3n desde tus aud\u00edfonos puede dejar de funcionar."
   },
   "bthserv": {
    "safety": "caution",
    "group": "bluetooth",
-   "noteEn": "Bluetooth Support Service \u2014 needed for Bluetooth devices"
+   "noteEn": "Bluetooth Support Service \u2014 needed for Bluetooth devices",
+   "needs": "bluetooth",
+   "whatEn": "Finds and connects your Bluetooth devices.",
+   "what": "Encuentra y conecta tus dispositivos Bluetooth.",
+   "offEn": "Bluetooth headphones, mice, keyboards and controllers stop connecting.",
+   "off": "Aud\u00edfonos, mouse, teclados y controles Bluetooth dejan de conectarse."
   },
   "cdpsvc": {
    "safety": "caution",
    "group": "telemetry",
-   "noteEn": "Connected Devices Platform \u2014 used by Timeline and device sync"
+   "noteEn": "Connected Devices Platform \u2014 used by Timeline and device sync",
+   "whatEn": "Connects your PC with your other devices (phone, other PCs).",
+   "what": "Conecta tu PC con tus otros dispositivos (tel\u00e9fono, otras PC).",
+   "offEn": "Phone Link, Nearby Sharing and syncing between devices may stop working.",
+   "off": "Enlace M\u00f3vil, compartir cerca y la sincronizaci\u00f3n entre equipos pueden dejar de funcionar."
   },
   "cdpusersvc": {
    "safety": "caution",
    "group": "telemetry",
-   "noteEn": "Connected Devices Platform per-user service"
+   "noteEn": "Connected Devices Platform per-user service",
+   "whatEn": "Your user's part of the service above.",
+   "what": "La parte de tu usuario del servicio anterior.",
+   "offEn": "Same: Phone Link and Nearby Sharing may fail.",
+   "off": "Lo mismo: Enlace M\u00f3vil y compartir cerca pueden fallar."
+  },
+  "certpropsvc": {
+   "safety": "caution",
+   "group": "security",
+   "noteEn": "Certificate Propagation \u2014 smart card certificates",
+   "needs": "smartCard",
+   "whatEn": "Copies your smart card's certificates into Windows.",
+   "what": "Copia los certificados de tu tarjeta inteligente a Windows.",
+   "offEn": "Signing in or signing with a smart card may fail.",
+   "off": "Iniciar sesi\u00f3n o firmar con tarjeta inteligente puede fallar."
   },
   "cryptsvc": {
    "safety": "unsafe",
    "group": "security",
-   "noteEn": "Cryptographic Services \u2014 required for signatures and certificates"
+   "noteEn": "Cryptographic Services \u2014 required for signatures and certificates",
+   "whatEn": "Checks signatures and certificates.",
+   "what": "Revisa firmas y certificados.",
+   "offEn": "Updates, installers and secure sites fail.",
+   "off": "Actualizaciones, instaladores y sitios seguros fallan."
   },
   "dcomlaunch": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "DCOM Server Process Launcher \u2014 critical for COM+"
+   "noteEn": "DCOM Server Process Launcher \u2014 critical for COM+",
+   "whatEn": "Starts Windows' COM components.",
+   "what": "Arranca los componentes COM de Windows.",
+   "offEn": "Windows stops working. Never turn it off.",
+   "off": "Windows deja de funcionar. Nunca lo apagues."
   },
   "dhcp": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "DHCP Client \u2014 required for automatic IP addressing"
+   "noteEn": "DHCP Client \u2014 required for automatic IP addressing",
+   "whatEn": "Gets an IP address from your router.",
+   "what": "Pide la direcci\u00f3n IP a tu m\u00f3dem.",
+   "offEn": "No internet on almost any network.",
+   "off": "Te quedas sin internet en casi cualquier red."
   },
   "diagsvc": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "Diagnostic Execution Service"
+   "noteEn": "Diagnostic Execution Service",
+   "whatEn": "Runs diagnostics asked for by Microsoft support.",
+   "what": "Ejecuta diagn\u00f3sticos que pide el soporte de Microsoft.",
+   "offEn": "Some troubleshooters won't work.",
+   "off": "Algunos solucionadores de problemas no funcionar\u00e1n."
   },
   "diagsystemhost": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "Diagnostic System Host"
+   "noteEn": "Diagnostic System Host",
+   "whatEn": "Helps system diagnostics.",
+   "what": "Ayuda a los diagn\u00f3sticos del sistema.",
+   "offEn": "Some troubleshooters won't work.",
+   "off": "Algunos solucionadores de problemas no funcionar\u00e1n."
   },
   "diagtrack": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "Connected User Experiences and Telemetry"
+   "noteEn": "Connected User Experiences and Telemetry",
+   "whatEn": "Sends usage and diagnostic data about your PC to Microsoft.",
+   "what": "Env\u00eda a Microsoft datos de uso y diagn\u00f3stico de tu PC.",
+   "offEn": "Nothing you'll notice: Windows works the same and sends less data.",
+   "off": "Nada que vayas a notar: Windows sigue igual y manda menos datos."
   },
   "dmwappushservice": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "WAP Push Message Routing for telemetry"
+   "noteEn": "WAP Push Message Routing for telemetry",
+   "whatEn": "Routes configuration messages used by telemetry.",
+   "what": "Reparte mensajes de configuraci\u00f3n que usa la telemetr\u00eda.",
+   "offEn": "Nothing on a home PC. Company-managed PCs may need it.",
+   "off": "Nada en una PC de casa. En equipos de empresa administrados podr\u00eda hacer falta."
   },
   "dmwappushsvc": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "WAP Push Message Routing (alternate name)"
+   "noteEn": "WAP Push Message Routing (alternate name)",
+   "whatEn": "Same as above, under its old name.",
+   "what": "Igual que el anterior, con su nombre viejo.",
+   "offEn": "Nothing on a home PC.",
+   "off": "Nada en una PC de casa."
   },
   "dnscache": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "DNS Client \u2014 required for name resolution"
+   "noteEn": "DNS Client \u2014 required for name resolution",
+   "whatEn": "Turns names like google.com into addresses.",
+   "what": "Convierte nombres como google.com en direcciones.",
+   "offEn": "The internet stops working or crawls.",
+   "off": "Internet deja de funcionar o va muy lento."
+  },
+  "edgeupdate": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Microsoft Edge Update",
+   "whatEn": "Keeps Microsoft Edge up to date.",
+   "what": "Mantiene Microsoft Edge actualizado.",
+   "offEn": "Edge stops getting security patches (other apps use it too).",
+   "off": "Edge deja de recibir parches de seguridad (tambi\u00e9n lo usan otras apps)."
+  },
+  "edgeupdatem": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Microsoft Edge Update (on demand)",
+   "whatEn": "Same as above, on demand.",
+   "what": "Igual que el anterior, cuando se le pide.",
+   "offEn": "Edge stops updating.",
+   "off": "Edge deja de actualizarse."
   },
   "eventlog": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Windows Event Log \u2014 needed for diagnostics and auditing"
+   "noteEn": "Windows Event Log \u2014 needed for diagnostics and auditing",
+   "whatEn": "Keeps the log of what happens in Windows.",
+   "what": "Lleva el registro de lo que pasa en Windows.",
+   "offEn": "Many things fail and you won't know why.",
+   "off": "Muchas cosas fallan y no sabr\u00e1s por qu\u00e9."
   },
   "fax": {
    "safety": "safe",
    "group": "fax",
-   "noteEn": "Fax service"
+   "noteEn": "Fax service",
+   "whatEn": "Sends and receives faxes with a modem.",
+   "what": "Para mandar y recibir faxes con un m\u00f3dem.",
+   "offEn": "Nothing, unless you still fax from this PC.",
+   "off": "Nada, a menos que todav\u00eda uses fax desde la PC."
+  },
+  "fhsvc": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "File History \u2014 backs up your files",
+   "whatEn": "File History: your backups.",
+   "what": "El Historial de archivos: tus respaldos.",
+   "offEn": "Your files stop being backed up.",
+   "off": "Tus archivos dejan de respaldarse."
+  },
+  "hvhost": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "HV Host Service",
+   "needs": "hyperV",
+   "whatEn": "Part of the Hyper-V host.",
+   "what": "Parte del anfitri\u00f3n de Hyper-V.",
+   "offEn": "Hyper-V and WSL 2 may fail.",
+   "off": "Hyper-V y WSL 2 pueden fallar."
   },
   "icssvc": {
    "safety": "safe",
    "group": "network",
-   "noteEn": "Windows Mobile Hotspot Service"
+   "noteEn": "Windows Mobile Hotspot Service",
+   "whatEn": "Turns your PC into a Wi-Fi hotspot.",
+   "what": "Convierte tu PC en zona Wi-Fi para compartir internet.",
+   "offEn": "You can't use the PC as a hotspot.",
+   "off": "No podr\u00e1s usar la PC como hotspot."
   },
   "lanmanserver": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "Server service \u2014 required for file sharing"
+   "noteEn": "Server service \u2014 required for file sharing",
+   "whatEn": "Shares folders and printers with other computers.",
+   "what": "Comparte carpetas e impresoras con otros equipos.",
+   "offEn": "Other computers can't see your shared folders.",
+   "off": "Otros equipos no ver\u00e1n tus carpetas compartidas."
   },
   "lanmanworkstation": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "Workstation service \u2014 required for network resource access"
+   "noteEn": "Workstation service \u2014 required for network resource access",
+   "whatEn": "Connects you to shared folders on the network.",
+   "what": "Te conecta a carpetas compartidas en la red.",
+   "offEn": "You can't open other computers' folders or a NAS.",
+   "off": "No podr\u00e1s abrir carpetas de otros equipos ni NAS."
   },
   "lfsvc": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "Geolocation Service"
+   "noteEn": "Geolocation Service",
+   "whatEn": "Tells apps and Windows where you are.",
+   "what": "Le dice a las apps y a Windows d\u00f3nde est\u00e1s.",
+   "offEn": "Maps, weather and Find My Device can't see your location.",
+   "off": "Mapas, el clima y \"Encontrar mi dispositivo\" ya no sabr\u00e1n tu ubicaci\u00f3n."
   },
   "lsm": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Local Session Manager \u2014 required for session management"
+   "noteEn": "Local Session Manager \u2014 required for session management",
+   "whatEn": "Manages user sessions.",
+   "what": "Administra las sesiones de usuario.",
+   "offEn": "Windows stops working. Never turn it off.",
+   "off": "Windows deja de funcionar. Nunca lo apagues."
   },
   "mapsbroker": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Downloaded Maps Manager"
+   "noteEn": "Downloaded Maps Manager",
+   "whatEn": "Downloads and updates offline maps.",
+   "what": "Descarga y actualiza los mapas sin conexi\u00f3n.",
+   "offEn": "Offline maps stop updating by themselves.",
+   "off": "Los mapas sin conexi\u00f3n no se actualizan solos."
+  },
+  "messagingservice": {
+   "safety": "safe",
+   "group": "misc",
+   "noteEn": "Messaging Service \u2014 SMS sync for the old Messaging app",
+   "whatEn": "Synced SMS for the old Messaging app.",
+   "what": "Sincronizaba SMS con la vieja app Mensajes.",
+   "offEn": "Nothing: that app is gone.",
+   "off": "Nada: esa app ya no existe."
   },
   "mpssvc": {
    "safety": "unsafe",
    "group": "security",
-   "noteEn": "Windows Defender Firewall \u2014 network protection"
+   "noteEn": "Windows Defender Firewall \u2014 network protection",
+   "whatEn": "Windows' firewall.",
+   "what": "El firewall de Windows.",
+   "offEn": "Your PC has no firewall on any network.",
+   "off": "Tu PC se queda sin firewall en cualquier red."
+  },
+  "netlogon": {
+   "safety": "caution",
+   "group": "network",
+   "noteEn": "Netlogon \u2014 needed on a company domain",
+   "needs": "domain",
+   "whatEn": "Connects the PC to a company domain.",
+   "what": "Conecta la PC con el dominio de una empresa.",
+   "offEn": "On a work PC you can't sign in with your work account. At home, nothing.",
+   "off": "En una PC de empresa no podr\u00e1s entrar con tu cuenta del trabajo. En casa, nada."
   },
   "netprofm": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "Network List Service \u2014 required for network management"
+   "noteEn": "Network List Service \u2014 required for network management",
+   "whatEn": "Your list of networks.",
+   "what": "La lista de tus redes.",
+   "offEn": "Networking and the connection icon misbehave.",
+   "off": "La red y el icono de conexi\u00f3n dejan de funcionar bien."
   },
   "nlasvc": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "Network Location Awareness \u2014 required for network detection"
+   "noteEn": "Network Location Awareness \u2014 required for network detection",
+   "whatEn": "Knows which network you're on.",
+   "what": "Sabe a qu\u00e9 red est\u00e1s conectado.",
+   "offEn": "Windows thinks you're offline and several apps fail.",
+   "off": "Windows cree que no tienes internet y varias apps fallan."
   },
   "nsi": {
    "safety": "unsafe",
    "group": "network",
-   "noteEn": "Network Store Interface \u2014 required for network connectivity"
+   "noteEn": "Network Store Interface \u2014 required for network connectivity",
+   "whatEn": "Keeps track of your network connections.",
+   "what": "Lleva la informaci\u00f3n de tus conexiones de red.",
+   "offEn": "No network.",
+   "off": "Te quedas sin red."
   },
   "onesyncsvc": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Sync Host \u2014 used by Mail, Calendar, Contacts"
+   "noteEn": "Sync Host \u2014 used by Mail, Calendar, Contacts",
+   "whatEn": "Syncs Mail, Calendar and Contacts.",
+   "what": "Sincroniza Correo, Calendario y Contactos.",
+   "offEn": "Those apps stop syncing.",
+   "off": "Esas apps dejan de sincronizar."
   },
   "pcasvc": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Program Compatibility Assistant"
+   "noteEn": "Program Compatibility Assistant",
+   "whatEn": "Spots old programs with problems and suggests fixes.",
+   "what": "Detecta programas viejos con problemas y sugiere arreglos.",
+   "offEn": "You won't see those suggestions for old programs.",
+   "off": "Ya no ver\u00e1s esas sugerencias para programas viejos."
   },
   "phonesvc": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Phone Service \u2014 required by some wireless headset dongles, including Audeze Maxwell"
+   "noteEn": "Phone Service \u2014 required by some wireless headset dongles, including Audeze Maxwell",
+   "whatEn": "Handles phone calls on the PC; some wireless headset dongles use it.",
+   "what": "Maneja llamadas de tel\u00e9fono en la PC; algunos dongles de aud\u00edfonos inal\u00e1mbricos lo usan.",
+   "offEn": "Some wireless headsets with a dongle may lose sound or the mic.",
+   "off": "Algunos aud\u00edfonos inal\u00e1mbricos con dongle pueden dejar de sonar o de usar el micr\u00f3fono."
   },
   "plugplay": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Plug and Play \u2014 required for device detection"
+   "noteEn": "Plug and Play \u2014 required for device detection",
+   "whatEn": "Recognizes what you plug in (USB, monitors, headphones).",
+   "what": "Reconoce lo que conectas (USB, monitores, aud\u00edfonos).",
+   "offEn": "New devices aren't recognized.",
+   "off": "Los dispositivos nuevos no se reconocen."
   },
   "power": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Power service \u2014 required for power management"
+   "noteEn": "Power service \u2014 required for power management",
+   "whatEn": "Manages power, sleep and battery.",
+   "what": "Administra la energ\u00eda, la suspensi\u00f3n y la bater\u00eda.",
+   "offEn": "Sleep breaks and the battery is badly managed.",
+   "off": "La PC no suspende bien y la bater\u00eda se maneja mal."
   },
   "printnotify": {
    "safety": "caution",
    "group": "print",
-   "noteEn": "Printer Extensions and Notifications"
+   "noteEn": "Printer Extensions and Notifications",
+   "needs": "printer",
+   "whatEn": "Shows your printer's notices and extras (ink, jams).",
+   "what": "Muestra avisos y extras de tu impresora (tinta, atascos).",
+   "offEn": "Those notices stop; printing still works.",
+   "off": "Dejas de ver esos avisos; imprimir sigue funcionando."
+  },
+  "printworkflowusersvc": {
+   "safety": "caution",
+   "group": "print",
+   "noteEn": "Print Workflow \u2014 needed by some printer apps",
+   "needs": "printer",
+   "whatEn": "Helps some printer apps work.",
+   "what": "Ayuda a ciertas apps de impresoras a funcionar.",
+   "offEn": "Some printer apps may fail.",
+   "off": "Algunas apps de tu impresora pueden fallar."
   },
   "profsvc": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "User Profile Service \u2014 required for login"
+   "noteEn": "User Profile Service \u2014 required for login",
+   "whatEn": "Loads your profile when you sign in.",
+   "what": "Carga tu perfil al iniciar sesi\u00f3n.",
+   "offEn": "You can't sign in. Never turn it off.",
+   "off": "No podr\u00e1s iniciar sesi\u00f3n. Nunca lo apagues."
   },
   "remoteaccess": {
    "safety": "safe",
    "group": "remote",
-   "noteEn": "Routing and Remote Access"
+   "noteEn": "Routing and Remote Access",
+   "whatEn": "Server routing and VPN.",
+   "what": "Enrutamiento y VPN de servidor.",
+   "offEn": "Nothing on a home PC.",
+   "off": "Nada en una PC de casa."
   },
   "remoteregistry": {
    "safety": "safe",
    "group": "remote",
-   "noteEn": "Remote Registry"
+   "noteEn": "Remote Registry",
+   "whatEn": "Lets other computers change this PC's registry.",
+   "what": "Deja que otros equipos cambien el registro de esta PC.",
+   "offEn": "Nothing, and your PC is safer.",
+   "off": "Nada, y tu PC queda m\u00e1s segura."
   },
   "retaildemo": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Retail Demo Service"
+   "noteEn": "Retail Demo Service",
+   "whatEn": "The demo mode used in stores.",
+   "what": "El modo demostraci\u00f3n de las tiendas.",
+   "offEn": "Nothing: it's useless at home.",
+   "off": "Nada: en tu casa no sirve."
   },
   "rpcss": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Remote Procedure Call \u2014 critical for Windows operation"
+   "noteEn": "Remote Procedure Call \u2014 critical for Windows operation",
+   "whatEn": "The base Windows programs use to talk to each other.",
+   "what": "La base con la que los programas de Windows se hablan.",
+   "offEn": "Windows won't start properly. Never turn it off.",
+   "off": "Windows no arranca bien. Nunca lo apagues."
   },
   "samss": {
    "safety": "unsafe",
    "group": "security",
-   "noteEn": "Security Accounts Manager \u2014 required for authentication"
+   "noteEn": "Security Accounts Manager \u2014 required for authentication",
+   "whatEn": "This PC's accounts and passwords.",
+   "what": "Las cuentas y contrase\u00f1as de esta PC.",
+   "offEn": "You can't sign in.",
+   "off": "No podr\u00e1s iniciar sesi\u00f3n."
+  },
+  "scardsvr": {
+   "safety": "caution",
+   "group": "security",
+   "noteEn": "Smart Card \u2014 needed for smart card readers",
+   "needs": "smartCard",
+   "whatEn": "Reads smart cards (work badges, digital ID cards).",
+   "what": "Lee tarjetas inteligentes (e.firma, credenciales de trabajo).",
+   "offEn": "Your smart card reader stops working.",
+   "off": "Tu lector de tarjetas inteligentes deja de funcionar."
+  },
+  "scdeviceenum": {
+   "safety": "caution",
+   "group": "security",
+   "noteEn": "Smart Card Device Enumeration",
+   "needs": "smartCard",
+   "whatEn": "Recognizes smart card readers.",
+   "what": "Reconoce los lectores de tarjetas inteligentes.",
+   "offEn": "Card readers aren't recognized.",
+   "off": "Los lectores de tarjeta no se reconocen."
   },
   "schedule": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Task Scheduler \u2014 used by many Windows components"
+   "noteEn": "Task Scheduler \u2014 used by many Windows components",
+   "whatEn": "The Task Scheduler.",
+   "what": "El Programador de tareas.",
+   "offEn": "Updates, maintenance and many apps stop working.",
+   "off": "Actualizaciones, mantenimiento y muchas apps dejan de funcionar."
   },
   "seclogon": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Secondary Logon (Run As)"
+   "noteEn": "Secondary Logon (Run As)",
+   "whatEn": "Allows \"Run as different user\".",
+   "what": "Permite \"Ejecutar como otro usuario\".",
+   "offEn": "That option stops working; few people use it at home.",
+   "off": "Esa opci\u00f3n deja de funcionar; casi nadie la usa en casa."
   },
   "securityhealthservice": {
    "safety": "unsafe",
    "group": "security",
-   "noteEn": "Windows Security Center"
+   "noteEn": "Windows Security Center",
+   "whatEn": "The Windows Security center.",
+   "what": "El centro de Seguridad de Windows.",
+   "offEn": "Security alerts stop.",
+   "off": "Dejas de ver alertas de seguridad."
+  },
+  "sensordataservice": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Sensor Data Service",
+   "needs": "sensors",
+   "whatEn": "Gives sensor data to apps.",
+   "what": "Entrega los datos de los sensores a las apps.",
+   "offEn": "Auto-rotate and auto-brightness may fail.",
+   "off": "La rotaci\u00f3n y el brillo autom\u00e1ticos pueden fallar."
+  },
+  "sensorservice": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Sensor Service \u2014 auto-rotate and auto-brightness",
+   "needs": "sensors",
+   "whatEn": "Sensors: auto-rotate and auto-brightness.",
+   "what": "Los sensores: rotaci\u00f3n autom\u00e1tica y brillo autom\u00e1tico.",
+   "offEn": "The screen no longer rotates or adjusts brightness by itself.",
+   "off": "La pantalla ya no gira sola ni ajusta el brillo."
+  },
+  "sensrsvc": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Sensor Monitoring Service",
+   "needs": "sensors",
+   "whatEn": "Watches light and motion sensors.",
+   "what": "Vigila los sensores de luz y movimiento.",
+   "offEn": "Auto-brightness may stop working.",
+   "off": "El brillo autom\u00e1tico puede dejar de funcionar."
   },
   "sessionenv": {
    "safety": "caution",
    "group": "remote",
-   "noteEn": "Remote Desktop Configuration"
+   "noteEn": "Remote Desktop Configuration",
+   "needs": "remoteDesktop",
+   "whatEn": "Configures Remote Desktop sessions.",
+   "what": "Configura las sesiones de Escritorio remoto.",
+   "offEn": "Remote Desktop may fail.",
+   "off": "Escritorio remoto puede fallar."
   },
   "sharedaccess": {
    "safety": "safe",
    "group": "network",
-   "noteEn": "Internet Connection Sharing"
+   "noteEn": "Internet Connection Sharing",
+   "whatEn": "Shares this PC's internet connection with other devices.",
+   "what": "Comparte la conexi\u00f3n a internet de esta PC con otros equipos.",
+   "offEn": "You can't share internet from this PC.",
+   "off": "No podr\u00e1s compartir internet desde esta PC."
   },
   "spooler": {
    "safety": "caution",
    "group": "print",
-   "noteEn": "Print Spooler \u2014 needed if you use a printer"
+   "noteEn": "Print Spooler \u2014 needed if you use a printer",
+   "needs": "printer",
+   "whatEn": "The print queue: sends your documents to the printer.",
+   "what": "La cola de impresi\u00f3n: manda tus documentos a la impresora.",
+   "offEn": "You can't print anything, and some apps can't print to PDF.",
+   "off": "No podr\u00e1s imprimir nada, ni a PDF en algunas apps."
   },
   "sppsvc": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Software Protection Platform \u2014 Windows activation"
+   "noteEn": "Software Protection Platform \u2014 Windows activation",
+   "whatEn": "Windows activation.",
+   "what": "La activaci\u00f3n de Windows.",
+   "offEn": "Windows may become unactivated.",
+   "off": "Windows podr\u00eda desactivarse."
+  },
+  "ssdpsrv": {
+   "safety": "caution",
+   "group": "network",
+   "noteEn": "SSDP Discovery \u2014 finds TVs, speakers and media devices",
+   "whatEn": "Finds TVs, speakers and other devices on your network.",
+   "what": "Encuentra teles, bocinas y otros aparatos en tu red.",
+   "offEn": "Casting to your TV or speakers may stop finding them.",
+   "off": "Transmitir a la tele o bocinas puede dejar de encontrarlas."
   },
   "ssh-agent": {
    "safety": "caution",
    "group": "developer",
-   "noteEn": "OpenSSH Authentication Agent"
+   "noteEn": "OpenSSH Authentication Agent",
+   "whatEn": "Keeps your SSH keys while you work.",
+   "what": "Guarda tus llaves SSH mientras trabajas.",
+   "offEn": "You'll type your SSH key passphrase every time.",
+   "off": "Tendr\u00e1s que escribir la contrase\u00f1a de tu llave SSH cada vez."
   },
   "sshd": {
    "safety": "caution",
    "group": "developer",
-   "noteEn": "OpenSSH SSH Server"
+   "noteEn": "OpenSSH SSH Server",
+   "whatEn": "Lets others log in to this PC over SSH.",
+   "what": "Deja que otros entren a esta PC por SSH.",
+   "offEn": "Nobody can log in over SSH (usually a good thing).",
+   "off": "Nadie podr\u00e1 entrar por SSH (eso suele ser bueno)."
+  },
+  "stisvc": {
+   "safety": "caution",
+   "group": "media",
+   "noteEn": "Windows Image Acquisition \u2014 scanners and some cameras",
+   "needs": "scanner",
+   "whatEn": "Makes scanners and some cameras work.",
+   "what": "Hace funcionar esc\u00e1neres y algunas c\u00e1maras.",
+   "offEn": "Your scanner (or all-in-one printer when scanning) stops working.",
+   "off": "Tu esc\u00e1ner (o la multifuncional al escanear) dejar\u00e1 de funcionar."
   },
   "sysmain": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Superfetch/SysMain \u2014 safe on SSDs, may slow HDDs"
+   "noteEn": "Superfetch/SysMain \u2014 safe on SSDs, may slow HDDs",
+   "needs": "hdd",
+   "softWithout": true,
+   "whatEn": "Preloads the apps you use most so they open fast.",
+   "what": "Precarga en memoria las apps que m\u00e1s usas para que abran r\u00e1pido.",
+   "offEn": "On an SSD you'll barely notice. On a hard disk, apps open slower.",
+   "off": "En un SSD casi no se nota. En disco duro mec\u00e1nico, las apps abren m\u00e1s lento."
   },
   "tabletinputservice": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Touch Keyboard and Handwriting \u2014 safe if no touch screen"
+   "noteEn": "Touch Keyboard and Handwriting \u2014 safe if no touch screen",
+   "needs": "touch",
+   "whatEn": "The touch keyboard, handwriting and pen.",
+   "what": "El teclado t\u00e1ctil, la escritura a mano y la pluma.",
+   "offEn": "The on-screen keyboard and pen stop working. Without a touch screen, nothing changes.",
+   "off": "El teclado en pantalla y la pluma dejan de funcionar. Sin pantalla t\u00e1ctil, nada cambia."
   },
   "termservice": {
    "safety": "caution",
    "group": "remote",
-   "noteEn": "Remote Desktop Services \u2014 needed for RDP"
+   "noteEn": "Remote Desktop Services \u2014 needed for RDP",
+   "needs": "remoteDesktop",
+   "whatEn": "Lets you connect to this PC with Remote Desktop.",
+   "what": "Deja que te conectes a esta PC con Escritorio remoto.",
+   "offEn": "You can't reach this PC with Remote Desktop.",
+   "off": "No podr\u00e1s entrar a esta PC con Escritorio remoto."
   },
   "themes": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Disabling removes theme support and visual styles"
+   "noteEn": "Disabling removes theme support and visual styles",
+   "whatEn": "Windows themes and visual styles.",
+   "what": "Los temas y el aspecto de Windows.",
+   "offEn": "Windows looks old-fashioned, without themes or effects.",
+   "off": "Windows se ve como antes, sin temas ni efectos."
+  },
+  "trkwks": {
+   "safety": "safe",
+   "group": "misc",
+   "noteEn": "Distributed Link Tracking Client",
+   "whatEn": "Tracks linked files moved across network drives.",
+   "what": "Sigue archivos vinculados cuando los mueves entre discos de la red.",
+   "offEn": "Some shortcuts to moved files won't fix themselves.",
+   "off": "Algunos accesos directos a archivos movidos no se arreglan solos."
   },
   "trustedinstaller": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Windows Modules Installer \u2014 required for updates"
+   "noteEn": "Windows Modules Installer \u2014 required for updates",
+   "whatEn": "Installs Windows updates and components.",
+   "what": "Instala las actualizaciones y los componentes de Windows.",
+   "offEn": "Updates and Windows features can't be installed.",
+   "off": "No se instalan actualizaciones ni funciones de Windows."
   },
   "umrdpservice": {
    "safety": "caution",
    "group": "remote",
-   "noteEn": "Remote Desktop Services UserMode Port Redirector"
+   "noteEn": "Remote Desktop Services UserMode Port Redirector",
+   "needs": "remoteDesktop",
+   "whatEn": "Brings your printers and USB into Remote Desktop sessions.",
+   "what": "Lleva tus impresoras y USB a la sesi\u00f3n de Escritorio remoto.",
+   "offEn": "Remote Desktop won't see your printers or USB.",
+   "off": "En Escritorio remoto no ver\u00e1s tus impresoras ni USB."
+  },
+  "upnphost": {
+   "safety": "caution",
+   "group": "network",
+   "noteEn": "UPnP Device Host",
+   "whatEn": "Lets this PC announce itself as a network device.",
+   "what": "Deja que esta PC se anuncie como aparato de la red.",
+   "offEn": "Other devices stop seeing your PC to share music or videos.",
+   "off": "Otros aparatos dejan de ver a tu PC para compartir m\u00fasica o videos."
+  },
+  "vmcompute": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Host Compute Service",
+   "needs": "hyperV",
+   "whatEn": "The engine behind Hyper-V, WSL 2, Docker and Sandbox.",
+   "what": "El motor de Hyper-V, WSL 2, Docker y el Sandbox.",
+   "offEn": "WSL 2, Docker, Sandbox and your virtual machines won't start.",
+   "off": "WSL 2, Docker, Sandbox y tus m\u00e1quinas virtuales no arrancan."
+  },
+  "vmicguestinterface": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Guest Service Interface \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Hyper-V host services for this virtual machine.",
+   "what": "Servicios del anfitri\u00f3n de Hyper-V para esta m\u00e1quina virtual.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmicheartbeat": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Heartbeat \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Tells the host this virtual machine is alive.",
+   "what": "Le avisa al anfitri\u00f3n que esta m\u00e1quina virtual sigue viva.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmickvpexchange": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Data Exchange \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Shares data with the Hyper-V host.",
+   "what": "Comparte datos con el anfitri\u00f3n de Hyper-V.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmicrdv": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Remote Desktop Virtualization \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Enhanced Remote Desktop in Hyper-V.",
+   "what": "Escritorio remoto mejorado en Hyper-V.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmicshutdown": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Guest Shutdown \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Lets the host shut down this virtual machine.",
+   "what": "Deja que el anfitri\u00f3n apague esta m\u00e1quina virtual.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmictimesync": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Time Synchronization \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Syncs the clock with the Hyper-V host.",
+   "what": "Sincroniza la hora con el anfitri\u00f3n de Hyper-V.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmicvmsession": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V PowerShell Direct \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "PowerShell Direct from the Hyper-V host.",
+   "what": "PowerShell Direct desde el anfitri\u00f3n de Hyper-V.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmicvss": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Volume Shadow Copy Requestor \u2014 only inside a virtual machine",
+   "needs": "virtualMachine",
+   "whatEn": "Backups of this virtual machine from the host.",
+   "what": "Respaldos de esta m\u00e1quina virtual desde el anfitri\u00f3n.",
+   "offEn": "Only matters inside a Hyper-V virtual machine.",
+   "off": "Solo sirve dentro de una m\u00e1quina virtual de Hyper-V."
+  },
+  "vmms": {
+   "safety": "caution",
+   "group": "hyper-v",
+   "noteEn": "Hyper-V Virtual Machine Management",
+   "needs": "hyperV",
+   "whatEn": "Manages your Hyper-V virtual machines.",
+   "what": "Administra tus m\u00e1quinas virtuales de Hyper-V.",
+   "offEn": "Your Hyper-V virtual machines won't start.",
+   "off": "Tus m\u00e1quinas virtuales de Hyper-V no arrancan."
+  },
+  "w32time": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Windows Time \u2014 keeps the clock right",
+   "whatEn": "Keeps your PC's clock accurate.",
+   "what": "Mantiene la hora de tu PC exacta.",
+   "offEn": "The clock drifts; secure sites and apps may complain.",
+   "off": "El reloj se va desfasando; sitios seguros y apps pueden quejarse."
+  },
+  "walletservice": {
+   "safety": "safe",
+   "group": "misc",
+   "noteEn": "Wallet Service",
+   "whatEn": "For the old Windows Wallet.",
+   "what": "Para la vieja Cartera de Windows.",
+   "offEn": "Nothing on almost every PC.",
+   "off": "Nada en casi todas las PC."
   },
   "wbiosrvc": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Windows Biometric Service \u2014 safe if no fingerprint reader"
+   "noteEn": "Windows Biometric Service \u2014 safe if no fingerprint reader",
+   "needs": "fingerprint",
+   "whatEn": "Reads your fingerprint or face for Windows Hello.",
+   "what": "Lee tu huella o tu cara para Windows Hello.",
+   "offEn": "You can't sign in with your fingerprint or face.",
+   "off": "Ya no podr\u00e1s entrar con tu huella o tu cara."
   },
   "wersvc": {
    "safety": "safe",
    "group": "telemetry",
-   "noteEn": "Windows Error Reporting"
+   "noteEn": "Windows Error Reporting",
+   "whatEn": "Collects crash reports and sends them to Microsoft.",
+   "what": "Junta y env\u00eda a Microsoft los reportes cuando una app truena.",
+   "offEn": "Crash reports stop being sent; apps work the same.",
+   "off": "Ya no se mandan reportes de errores; las apps funcionan igual."
   },
   "windefend": {
    "safety": "unsafe",
    "group": "security",
-   "noteEn": "Windows Defender Antivirus \u2014 primary system protection"
+   "noteEn": "Windows Defender Antivirus \u2014 primary system protection",
+   "whatEn": "Windows' antivirus.",
+   "what": "El antivirus de Windows.",
+   "offEn": "Your PC is left without antivirus.",
+   "off": "Tu PC se queda sin antivirus."
   },
   "winmgmt": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Windows Management Instrumentation \u2014 widely depended on"
+   "noteEn": "Windows Management Instrumentation \u2014 widely depended on",
+   "whatEn": "WMI: many programs use it to learn about your PC.",
+   "what": "WMI: muchos programas lo usan para saber de tu PC.",
+   "offEn": "Programs, drivers and this app stop working properly.",
+   "off": "Programas, controladores y esta app dejan de funcionar bien."
   },
   "wisvc": {
    "safety": "safe",
    "group": "misc",
-   "noteEn": "Windows Insider Service"
+   "noteEn": "Windows Insider Service",
+   "whatEn": "For the Windows Insider program (preview builds).",
+   "what": "Para el programa Windows Insider (versiones de prueba).",
+   "offEn": "Nothing, unless you're a Windows Insider.",
+   "off": "Nada, si no est\u00e1s en Windows Insider."
+  },
+  "wlansvc": {
+   "safety": "caution",
+   "group": "network",
+   "noteEn": "WLAN AutoConfig \u2014 needed for Wi-Fi",
+   "needs": "wifi",
+   "whatEn": "Finds and connects to Wi-Fi networks.",
+   "what": "Busca y se conecta a redes Wi-Fi.",
+   "offEn": "No Wi-Fi. With a network cable, nothing changes.",
+   "off": "Te quedas sin Wi-Fi. Con cable de red, nada cambia."
   },
   "wmpnetworksvc": {
    "safety": "safe",
    "group": "media",
-   "noteEn": "Windows Media Player Network Sharing"
+   "noteEn": "Windows Media Player Network Sharing",
+   "whatEn": "Shares your Windows Media Player library on the network.",
+   "what": "Comparte tu m\u00fasica y videos de Windows Media Player en la red.",
+   "offEn": "Other devices won't see your Media Player library.",
+   "off": "Otros equipos ya no ver\u00e1n tu biblioteca de Media Player."
+  },
+  "wpcmonsvc": {
+   "safety": "caution",
+   "group": "misc",
+   "noteEn": "Parental Controls",
+   "whatEn": "Microsoft Family parental controls.",
+   "what": "El control parental de Microsoft Family.",
+   "offEn": "Family time limits and filters stop applying.",
+   "off": "Los l\u00edmites de tiempo y filtros de Family dejan de aplicarse."
   },
   "wpnservice": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Windows Push Notifications \u2014 needed for app notifications"
+   "noteEn": "Windows Push Notifications \u2014 needed for app notifications",
+   "whatEn": "App notifications.",
+   "what": "Las notificaciones de las apps.",
+   "offEn": "App and system notifications stop.",
+   "off": "Dejas de recibir notificaciones de apps y del sistema."
   },
   "wpnuserservice": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Windows Push Notifications per-user service"
+   "noteEn": "Windows Push Notifications per-user service",
+   "whatEn": "Your user's part of notifications.",
+   "what": "La parte de tu usuario de las notificaciones.",
+   "offEn": "Notifications stop.",
+   "off": "Dejas de recibir notificaciones."
   },
   "wsearch": {
    "safety": "caution",
    "group": "misc",
-   "noteEn": "Windows Search \u2014 disabling removes file indexing and search"
+   "noteEn": "Windows Search \u2014 disabling removes file indexing and search",
+   "whatEn": "Indexes your files so search is instant.",
+   "what": "Indexa tus archivos para que la b\u00fasqueda sea instant\u00e1nea.",
+   "offEn": "Searching files and email becomes slow and less complete.",
+   "off": "Buscar archivos y correos se vuelve lento y menos completo."
   },
   "wuauserv": {
    "safety": "unsafe",
    "group": "core",
-   "noteEn": "Windows Update \u2014 required to receive security patches"
+   "noteEn": "Windows Update \u2014 required to receive security patches",
+   "whatEn": "Windows Update: security patches.",
+   "what": "Windows Update: los parches de seguridad.",
+   "offEn": "No more security patches. Your PC is left exposed.",
+   "off": "Dejas de recibir parches de seguridad. Tu PC queda expuesta."
+  },
+  "wwansvc": {
+   "safety": "caution",
+   "group": "network",
+   "noteEn": "Mobile Broadband \u2014 SIM / LTE connections",
+   "needs": "mobileBroadband",
+   "whatEn": "SIM connections (LTE/5G).",
+   "what": "Las conexiones con SIM (LTE/5G).",
+   "offEn": "If your PC has a SIM, it loses mobile data.",
+   "off": "Si tu PC tiene SIM, se queda sin datos m\u00f3viles."
   },
   "xblauthmanager": {
    "safety": "caution",
    "group": "xbox",
-   "noteEn": "Xbox Live Auth Manager \u2014 needed for Xbox/Game Pass"
+   "noteEn": "Xbox Live Auth Manager \u2014 needed for Xbox/Game Pass",
+   "needs": "xbox",
+   "whatEn": "Signs in to Xbox Live for games and Game Pass.",
+   "what": "Inicia sesi\u00f3n en Xbox Live para juegos y Game Pass.",
+   "offEn": "Xbox and Game Pass games can't sign in to your account.",
+   "off": "Los juegos de Xbox y Game Pass no podr\u00e1n entrar a tu cuenta."
   },
   "xblgamesave": {
    "safety": "caution",
    "group": "xbox",
-   "noteEn": "Xbox Live Game Save \u2014 needed for cloud saves"
+   "noteEn": "Xbox Live Game Save \u2014 needed for cloud saves",
+   "needs": "xbox",
+   "whatEn": "Saves your Xbox games to the cloud.",
+   "what": "Guarda tus partidas de Xbox en la nube.",
+   "offEn": "Saves stop syncing; you could lose progress between devices.",
+   "off": "Tus partidas dejan de sincronizarse; podr\u00edas perder avance entre equipos."
   },
   "xboxgipsvc": {
    "safety": "caution",
    "group": "xbox",
-   "noteEn": "Xbox Accessory Management \u2014 needed for Xbox controllers"
+   "noteEn": "Xbox Accessory Management \u2014 needed for Xbox controllers",
+   "needs": "xbox",
+   "whatEn": "Manages Xbox controllers and accessories.",
+   "what": "Maneja los controles y accesorios de Xbox.",
+   "offEn": "Your Xbox controller may stop updating or working properly.",
+   "off": "Tu control de Xbox puede dejar de actualizarse o de funcionar bien."
   },
   "xboxnetapisvc": {
    "safety": "caution",
    "group": "xbox",
-   "noteEn": "Xbox Live Networking Service \u2014 needed for Xbox online features"
+   "noteEn": "Xbox Live Networking Service \u2014 needed for Xbox online features",
+   "needs": "xbox",
+   "whatEn": "Networking for Xbox online games.",
+   "what": "La red de los juegos de Xbox en l\u00ednea.",
+   "offEn": "Multiplayer in Xbox games may fail.",
+   "off": "El multijugador de juegos de Xbox puede fallar."
   }
  }
 }

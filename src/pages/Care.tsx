@@ -323,6 +323,7 @@ const DONE_TEXT: Record<string, [IconName, string]> = {
   scan: ["shield", N_("Ran a quick scan with Defender")],
   repair: ["build", N_("Ran a Windows repair ({detail})")],
   restorePoint: ["history", N_("Made a restore point")],
+  drivers: ["refresh", N_("Updated {count} drivers")],
   routineSet: ["schedule", N_("Changed the weekly clean")],
 };
 
@@ -465,7 +466,7 @@ const DONE_SHORT: Record<string, string> = {
   clean: N_("Cleans"), routine: N_("Weekly cleans"), trash: N_("To the Recycle Bin"), shred: N_("Shredded"), empty: N_("Empty folders"),
   uninstall: N_("Uninstalls"), apps: N_("Preinstalled apps"), service: N_("Services"), registry: N_("Registry"), privacy: N_("Privacy"),
   traces: N_("Traces"), firewall: N_("Firewall"), scan: N_("Defender scans"), repair: N_("Windows repairs"), restorePoint: N_("Restore points"),
-  routineSet: N_("Weekly clean"), game: N_("Game mode"),
+  routineSet: N_("Weekly clean"), game: N_("Game mode"), drivers: N_("Drivers"),
 };
 
 /** A ring split in parts, in the kind colours. */

@@ -3,17 +3,20 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 import {
-  preinstalledList, programsList, relaunchAdmin, removeLeftovers, removePreinstalled, startupList, startupSet, uninstall, updateRun, updatesList,
-  type Leftover, type Preinstalled, type Program, type Removed, type StartupItem, type Update,
+  driversInstall, driversScan, preinstalledList, programsList, relaunchAdmin, removeLeftovers, removePreinstalled, startupList, startupSet, uninstall, updateRun, updatesList,
+  type DriverPriority, type DriversDone, type DriverUpdate, type Leftover, type Preinstalled, type Program, type Removed, type StartupItem, type Update,
 } from "../core/api";
 import { bytes } from "../core/format";
 import { language, N_, t, tn } from "../i18n/i18n";
 import { Check, Dock, Outcome, useChoice } from "./storage/common";
 import { Icon } from "../ui/Icon";
+import type { IconName } from "../ui/icons";
+import { Tokkip } from "../ui/Tokkip";
+import { AdminBanner, needsAdmin } from "../ui/AdminBanner";
 import { Sound } from "../core/sound";
 import { Working } from "../ui/Working";
 
-type Tab = "startup" | "programs" | "preinstalled" | "updates";
+type Tab = "startup" | "programs" | "preinstalled" | "updates" | "drivers";
 let lastTab: Tab = "startup";
 
 /** Opens this section on a given tab next time (the dashboard\'s links). */
@@ -48,11 +51,16 @@ export function Software() {
           <Icon name="refresh" size={20} />
           {t("Updates")}
         </button>
+        <button role="tab" aria-selected={tab === "drivers"} onClick={() => go("drivers")}>
+          <Icon name="build" size={20} />
+          {t("Drivers")}
+        </button>
       </nav>
       {tab === "startup" && <Startup />}
       {tab === "programs" && <Programs />}
       {tab === "preinstalled" && <PreinstalledApps />}
       {tab === "updates" && <Updates />}
+      {tab === "drivers" && <Drivers />}
     </>
   );
 }
@@ -439,6 +447,164 @@ function Updates() {
             ))}
           </ul>
         </section>
+      )}
+    </>
+  );
+}
+
+// ── Drivers ──────────────────────────────────────────────────────────────
+
+const PRIORITY: Record<DriverPriority, { label: string; chip: string; hint: string }> = {
+  important: { label: N_("Important"), chip: "ok", hint: N_("Network or chipset: keeps the PC stable and connected. Update it.") },
+  recommended: { label: N_("Recommended"), chip: "ok", hint: N_("Worth it: better graphics, sound, Bluetooth or USB.") },
+  optional: { label: N_("Optional"), chip: "", hint: N_("Only if something with this device isn't working right.") },
+  careful: { label: N_("Careful"), chip: "warn", hint: N_("Disk or firmware: worth it, but don't turn off or unplug the PC while it installs.") },
+  older: { label: N_("Older"), chip: "warn", hint: N_("Older than the one you have: skip it.") },
+};
+const KIND_ICON: Record<string, IconName> = { graphics: "image", network: "web", audio: "music", storage: "drive", usb: "usb", printer: "document", camera: "video" };
+const worthIt = (d: DriverUpdate) => d.priority === "important" || d.priority === "recommended";
+
+function Drivers() {
+  const [list, setList] = useState<DriverUpdate[] | null | undefined>(undefined);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [restorePoint, setRestorePoint] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  const [done, setDone] = useState<DriversDone | null>(null);
+  const load = () => {
+    setList(undefined);
+    setDone(null);
+    driversScan().then(
+      (l) => {
+        setList(l);
+        setChosen(new Set(l.filter(worthIt).map((d) => d.id)));
+      },
+      () => setList(null),
+    );
+  };
+  useEffect(load, []);
+  if (list === undefined) return <Working text={t("Asking Windows Update about your drivers… this takes a minute.")} />;
+  if (list === null)
+    return (
+      <section class="card empty-state">
+        <Icon name="info" size={40} />
+        <h2>{t("I couldn't ask Windows Update")}</h2>
+        <p>{t("Check that you're online and that Windows Update isn't switched off, then look again.")}</p>
+        <button class="btn tonal" onClick={load}>
+          <Icon name="refresh" size={20} />
+          {t("Look again")}
+        </button>
+      </section>
+    );
+
+  const toggle = (id: string) => {
+    const next = new Set(chosen);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setChosen(next);
+    Sound.play("tick");
+  };
+  const install = async () => {
+    setBusy(true);
+    try {
+      const r = await driversInstall([...chosen], restorePoint);
+      setDone(r);
+      setAdmin(false);
+      Sound.play(r.failed ? "error" : "pop");
+      const left = list.filter((d) => !chosen.has(d.id));
+      if (!r.failed) {
+        setList(left);
+        setChosen(new Set());
+      }
+    } catch (e) {
+      if (needsAdmin(e)) setAdmin(true);
+      Sound.play("error");
+    }
+    setBusy(false);
+  };
+  const worth = list.filter(worthIt);
+  const size = list.filter((d) => chosen.has(d.id)).reduce((a, d) => a + d.size, 0);
+
+  return (
+    <>
+      <section class="hero card compact">
+        <Tokkip size={110} state={busy ? "working" : worth.length ? "approval" : "idle"} dancing={!busy && list.length === 0} label="Tokkip" />
+        <div class="hero-text">
+          <h1 class="display">{list.length ? tn("{n} driver has an update", "{n} drivers have an update", list.length) : t("Your drivers are up to date")}</h1>
+          <p class="lead">
+            {t("They come from Windows Update: Microsoft checked them for your PC.")}{" "}
+            {worth.length
+              ? tn("I'd update one; the rest only if something isn't working right.", "I'd update {n}; the rest only if something isn't working right.", worth.length)
+              : list.length
+                ? t("None is urgent: update them only if something isn't working right.")
+                : ""}
+          </p>
+          <div class="actions">
+            {worth.length > 0 && (
+              <button class="btn filled" disabled={busy} onClick={() => setChosen(new Set(worth.map((d) => d.id)))}>
+                <Icon name="check" size={20} />
+                {t("Only what's worth it")}
+              </button>
+            )}
+            <button class="btn tonal" disabled={busy} onClick={load}>
+              <Icon name="refresh" size={20} />
+              {t("Look again")}
+            </button>
+          </div>
+        </div>
+      </section>
+      {admin && <AdminBanner text={t("Installing drivers needs administrator rights.")} />}
+      {done && (
+        <div class="outcome" role="status">
+          <Icon name={done.installed ? "check" : "info"} />
+          <p>
+            {tn("{n} driver updated.", "{n} drivers updated.", done.installed)} {done.failed > 0 && tn("One didn't install.", "{n} didn't install.", done.failed)}{" "}
+            {done.restorePoint && t("There's a restore point from before.")} {done.reboot && t("Restart your PC to finish.")}
+          </p>
+        </div>
+      )}
+      {list.length > 0 && (
+        <>
+          <section class="card list-card">
+            <ul class="files">
+              {list.map((d) => {
+                const p = PRIORITY[d.priority];
+                return (
+                  <li key={d.id} class="file">
+                    <Check on={chosen.has(d.id)} onChange={() => toggle(d.id)} label={d.device} disabled={busy} />
+                    <span class="file-icon">
+                      <Icon name={KIND_ICON[d.kind] ?? "build"} size={20} />
+                    </span>
+                    <span class="file-text">
+                      <span class="file-name">
+                        {d.device} <span class={`chip ${p.chip}`}>{t(p.label)}</span>
+                      </span>
+                      <span class="file-where">
+                        {d.provider}
+                        {d.currentDate && ` · ${d.currentDate} → ${d.availableDate}`}
+                        {d.size > 0 && ` · ${bytes(d.size)}`}
+                      </span>
+                      <span class="file-where wrap">{t(p.hint)}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <label class="switch-row pad">
+              <span>
+                {t("Make a restore point first")}
+                <span class="file-where wrap">{t("If a driver goes wrong, you can go back to how the PC was. Recommended.")}</span>
+              </span>
+              <input type="checkbox" class="switch" checked={restorePoint} disabled={busy} onChange={() => setRestorePoint(!restorePoint)} />
+            </label>
+          </section>
+          <Dock
+            text={chosen.size ? tn("{n} driver chosen · {size}", "{n} drivers chosen · {size}", chosen.size, { size: bytes(size) }) : t("Choose the drivers to update")}
+            action={busy ? t("Installing…") : t("Install")}
+            icon="download"
+            disabled={chosen.size === 0 || busy}
+            onClick={() => void install()}
+          />
+        </>
       )}
     </>
   );

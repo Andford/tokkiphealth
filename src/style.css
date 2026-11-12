@@ -403,6 +403,21 @@ button { font: inherit; color: inherit; }
 .hint.pad { padding: 0 12px; }
 .safety-safe { background: color-mix(in srgb, var(--c-success) 18%, transparent); color: var(--c-success); }
 .safety-caution { background: color-mix(in srgb, var(--c-warn) 18%, transparent); color: var(--c-warn); }
+.verdict-off { background: color-mix(in srgb, var(--c-success) 18%, transparent); color: var(--c-success); }
+.verdict-optional { background: color-mix(in srgb, var(--c-warn) 18%, transparent); color: var(--c-warn); }
+
+/* Tokkip's advice: a row that opens to say what it does and what you lose. */
+.file.advice { align-items: flex-start; }
+.file.advice > .btn { margin-top: 4px; }
+.file-name.link-like { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.file-name.link-like .icon { flex: none; color: var(--c-on-surface-variant); transition: transform 0.2s; }
+.file-name.link-like .icon.turned { transform: rotate(180deg); }
+.advice-more { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 4px; font-size: 13px; }
+.advice-more dt { font-weight: 600; color: var(--c-on-surface); }
+.advice-more dd { margin: 0; color: var(--c-on-surface-variant); }
+.switch-row.pad { margin: 0; padding: 12px; max-width: none; gap: 16px; border-top: 1px solid var(--c-outline-variant); }
+.switch-row.pad > span { display: flex; flex-direction: column; gap: 2px; font-weight: 600; }
+.switch-row.pad .file-where { font-weight: 400; }
 
 .actions.pad { padding: 4px 12px 8px; margin-top: 8px; }
 .routine-when { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
