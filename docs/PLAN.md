@@ -2,10 +2,9 @@
 
 Tokkip Healthy PC se reescribe de cero, 100% nuestra: Tauri 2 (Rust para el
 sistema, Preact + TypeScript para la interfaz) y el diseño de Tokkip PC
-(Material 3 Expressive, claro u oscuro, Tokkip vivo). Se construye en la rama
-`nueva`. La versión basada en Kudu (ramas `tokkip` y `main`) sigue siendo la
-que se instala hasta que esta haga todo lo que aquella hace; entonces `nueva`
-pasa a ser `main`.
+(Material 3 Expressive, claro u oscuro, Tokkip vivo). Vive en
+Andford/tokkiphealth. La versión basada en Kudu (Andford/tokkiphealthypc) sigue
+siendo la que se instala hasta que esta haga todo lo que aquella hace.
 
 ## Principios
 
