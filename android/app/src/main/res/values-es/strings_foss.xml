@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="upgrades_dashcard_title">Desbloquear Tokkip Health</string>
+    <string name="upgrades_dashcard_body">Activa las funciones extra.</string>
+    <string name="upgrades_dashcard_upgrade_action">Desbloquear</string>
+    <string name="upgrade_screen_title">Tokkip Health</string>
+    <string name="upgrade_screen_preamble">Tokkip Health no tiene anuncios ni vende tus datos.</string>
+    <string name="upgrade_screen_how_title">Cómo activarlo</string>
+    <string name="upgrade_screen_how_body">Todo ya viene activado en Tokkip Health. Si quieres apoyar a SD Maid SE, la app en la que está basado, el botón de abajo abre su página de GitHub Sponsors.</string>
+    <string name="upgrade_screen_why_title">Lo que incluye</string>
+    <string name="upgrade_screen_why_body">• Limpieza de cachés y basura de apps\n• Quitar archivos duplicados\n• Comprimir fotos y videos\n• Deslizar para ordenar archivos viejos\n• Limpiar con un toque desde el widget\n• Limpiezas programadas\n• Filtros y reglas propios\n• Tendencia e historial del almacenamiento\n• Más funciones y ajustes en toda la app</string>
+    <string name="upgrade_screen_sponsor_action">Apoyar a SD Maid SE</string>
+    <string name="upgrade_screen_sponsor_action_hint">Gracias a SD Maid SE existe Tokkip Health</string>
+    <string name="upgrade_screen_thanks_toast">Gracias por apoyar el software libre ❤️</string>
+    <string name="upgrade_screen_sponsor_return_too_quick">¿Ya de regreso?</string>
+    <string name="upgrade_screen_status_free_title">Versión gratuita</string>
+    <string name="upgrade_screen_status_free_body">Algunas funciones extra no están activadas.</string>
+    <string name="upgrade_screen_status_free_action">Ver opciones</string>
+    <string name="upgrade_screen_status_upgraded_title">Todo activado</string>
+    <string name="upgrade_screen_status_upgraded_body">Todas las funciones extra están activadas.</string>
+    <string name="upgrade_screen_supporter_since">Desde %s</string>
+    <string name="upgrade_screen_recurring_title">Que siga creciendo</string>
+    <string name="upgrade_screen_recurring_body">SD Maid SE, en el que se basa Tokkip Health, sigue mejorando con cada versión. Si quieres, puedes apoyarlo en GitHub Sponsors.</string>
+    <string name="upgrade_screen_recurring_action">Abrir GitHub Sponsors</string>
+</resources>

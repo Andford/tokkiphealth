@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="swiper_label">Deslizar</string>
+    <string name="swiper_tool_description">Ordena carpetas rápido: desliza cada archivo para conservarlo, borrarlo o saltarlo.</string>
+    <string name="swiper_dashcard_description">Ordena carpetas más rápido que con un explorador de archivos: solo desliza cada archivo.</string>
+    <string name="swiper_start_action">Empezar a deslizar</string>
+    <string name="swiper_continue_action">Seguir la sesión</string>
+    <string name="swiper_sessions_description">Revisa tus archivos en 3 pasos:\n\n1. Elige una carpeta\n2. Desliza cada archivo para conservarlo, borrarlo o saltarlo\n3. Revisa lo que elegiste y confirma\n\nNo se borra nada hasta que tocas el botón final de borrar.</string>
+    <string name="swiper_select_folders_action">Elegir carpetas</string>
+    <plurals name="swiper_result_x_items_found">
+        <item quantity="one">Encontré %d archivo</item>
+        <item quantity="many">Encontré %d archivos</item>
+        <item quantity="other">Encontré %d archivos</item>
+    </plurals>
+    <plurals name="swiper_result_x_items_deleted">
+        <item quantity="one">Borré %d archivo</item>
+        <item quantity="many">Borré %d archivos</item>
+        <item quantity="other">Borré %d archivos</item>
+    </plurals>
+    <plurals name="swiper_result_x_items_failed">
+        <item quantity="one">%d archivo falló</item>
+        <item quantity="many">%d archivos fallaron</item>
+        <item quantity="other">%d archivos fallaron</item>
+    </plurals>
+    <string name="swiper_item_position">%1$d de %2$d</string>
+    <string name="swiper_keep_action">Conservar</string>
+    <string name="swiper_skip_action">Saltar</string>
+    <string name="swiper_review_action">Revisar</string>
+    <string name="swiper_status_title">Revisa lo que elegiste</string>
+    <string name="swiper_status_action_keep_selected">Conservar lo elegido</string>
+    <string name="swiper_status_action_delete_selected">Borrar lo elegido</string>
+    <string name="swiper_status_action_reset_selected">Deshacer lo elegido</string>
+    <string name="swiper_delete_confirmation_title">¿Borrar los archivos?</string>
+    <plurals name="swiper_delete_confirmation_message">
+        <item quantity="one">Se borra para siempre %1$d archivo (%2$s). No se puede deshacer.</item>
+        <item quantity="many">Se borran para siempre %1$d archivos (%2$s). No se puede deshacer.</item>
+        <item quantity="other">Se borran para siempre %1$d archivos (%2$s). No se puede deshacer.</item>
+    </plurals>
+    <plurals name="swiper_delete_confirmation_message_partial_undecided">
+        <item quantity="one">%d archivo sin decidir se queda para revisarlo después.</item>
+        <item quantity="many">%d archivos sin decidir se quedan para revisarlos después.</item>
+        <item quantity="other">%d archivos sin decidir se quedan para revisarlos después.</item>
+    </plurals>
+    <string name="swiper_delete_confirmation_sensitive_root_warning">Esta sesión abarca todo un almacenamiento: borrar aquí afecta todas sus carpetas.</string>
+    <plurals name="swiper_delete_confirmation_more_folders">
+        <item quantity="one">…y %d carpeta más</item>
+        <item quantity="many">…y %d carpetas más</item>
+        <item quantity="other">…y %d carpetas más</item>
+    </plurals>
+    <string name="swiper_delete_confirmation_checkbox">Entiendo que estos archivos se borran para siempre.</string>
+    <string name="swiper_sensitive_root_warning_title">¿Revisar todo el almacenamiento?</string>
+    <string name="swiper_sensitive_root_warning_message">Revisar %1$s incluye todos los archivos de ese almacenamiento: fotos, documentos, descargas, multimedia de apps y más. ¿Seguir?</string>
+    <string name="swiper_sensitive_root_warning_continue_action">Seguir de todos modos</string>
+    <string name="swiper_session_risky_label">Todo el almacenamiento</string>
+    <string name="swiper_session_risky_info_message">Esta sesión empieza en la raíz de un almacenamiento, así que entra todo lo que hay ahí: fotos, documentos, descargas, multimedia de apps y más.\n\nRevisar todo un almacenamiento puede dar muchísimos archivos, incluso algunos que no pensabas revisar. Usa un filtro de tipo de archivo para acotar.</string>
+    <string name="swiper_delete_x_action">Borrar %1$d</string>
+    <string name="swiper_settings_swap_directions_title">Invertir direcciones</string>
+    <string name="swiper_settings_swap_directions_summary">Desliza a la izquierda para conservar y a la derecha para borrar.</string>
+    <string name="swiper_settings_show_details_title">Ver detalles del archivo</string>
+    <string name="swiper_settings_show_details_summary">Muestra nombre, tamaño y fecha mientras deslizas.</string>
+    <string name="swiper_settings_haptic_feedback_title">Vibración</string>
+    <string name="swiper_settings_haptic_feedback_summary">Vibra al decidir conservar o borrar.</string>
+    <string name="swiper_discard_session_confirmation_title">¿Descartar la sesión?</string>
+    <string name="swiper_discard_session_confirmation_message">Se pierde todo lo que decidiste. ¿Seguro?</string>
+    <plurals name="swiper_dashcard_session_context">
+        <item quantity="one">Sigue la sesión de hace %1$d día (%2$d%% lista)</item>
+        <item quantity="many">Sigue la sesión de hace %1$d días (%2$d%% lista)</item>
+        <item quantity="other">Sigue la sesión de hace %1$d días (%2$d%% lista)</item>
+    </plurals>
+    <plurals name="swiper_dashcard_x_sessions">
+        <item quantity="one">%d sesión</item>
+        <item quantity="many">%d sesiones</item>
+        <item quantity="other">%d sesiones</item>
+    </plurals>
+    <plurals name="swiper_dashcard_x_undecided_items">
+        <item quantity="one">%d archivo sin decidir</item>
+        <item quantity="many">%d archivos sin decidir</item>
+        <item quantity="other">%d archivos sin decidir</item>
+    </plurals>
+    <string name="swiper_session_timestamps">Creada %1$s, último movimiento %2$s</string>
+    <string name="swiper_session_remove_action">Quitar la sesión</string>
+    <string name="swiper_sessions_empty_hint">Toca + para elegir una carpeta y empezar a deslizar</string>
+    <string name="swiper_sessions_upgrade_body">Esta versión tiene estos límites:</string>
+    <plurals name="swiper_sessions_upgrade_files_limit">
+        <item quantity="one">%d archivo por sesión</item>
+        <item quantity="many">%d archivos por sesión</item>
+        <item quantity="other">%d archivos por sesión</item>
+    </plurals>
+    <plurals name="swiper_sessions_upgrade_sessions_limit">
+        <item quantity="one">%d sesión</item>
+        <item quantity="many">%d sesiones</item>
+        <item quantity="other">%d sesiones</item>
+    </plurals>
+    <string name="swiper_session_default_label">Sesión %d</string>
+    <string name="swiper_session_rename_title">Renombrar la sesión</string>
+    <string name="swiper_session_rename_hint">Escribe un nombre para esta sesión</string>
+    <string name="swiper_sessions_current_sessions">Sesiones actuales</string>
+    <string name="swiper_session_paths_label">Rutas</string>
+    <plurals name="swiper_session_paths_more">
+        <item quantity="one">…y %d más</item>
+        <item quantity="many">…y %d más</item>
+        <item quantity="other">…y %d más</item>
+    </plurals>
+    <string name="swiper_session_status_label">Estado</string>
+    <plurals name="swiper_session_status_to_keep">
+        <item quantity="one">%d por conservar</item>
+        <item quantity="many">%d por conservar</item>
+        <item quantity="other">%d por conservar</item>
+    </plurals>
+    <plurals name="swiper_session_status_to_delete">
+        <item quantity="one">%d por borrar</item>
+        <item quantity="many">%d por borrar</item>
+        <item quantity="other">%d por borrar</item>
+    </plurals>
+    <plurals name="swiper_session_status_undecided">
+        <item quantity="one">%d sin decidir</item>
+        <item quantity="many">%d sin decidir</item>
+        <item quantity="other">%d sin decidir</item>
+    </plurals>
+    <plurals name="swiper_session_status_kept">
+        <item quantity="one">%d conservado</item>
+        <item quantity="many">%d conservados</item>
+        <item quantity="other">%d conservados</item>
+    </plurals>
+    <plurals name="swiper_session_status_deleted">
+        <item quantity="one">%d borrado</item>
+        <item quantity="many">%d borrados</item>
+        <item quantity="other">%d borrados</item>
+    </plurals>
+    <string name="swiper_exclude_confirmation_message">¿Excluir \"%1$s\" de Deslizar?</string>
+    <string name="swiper_sessions_header_title">¿Listo para ordenar?</string>
+    <string name="swiper_sessions_suggestions_label">Empieza por:</string>
+    <string name="swiper_sessions_suggestion_downloads">Descargas</string>
+    <string name="swiper_sessions_suggestion_screenshots">Capturas de pantalla</string>
+    <string name="swiper_sessions_suggestion_camera">Fotos de la cámara</string>
+    <string name="swiper_stamp_keep_1">¡Se queda!</string>
+    <string name="swiper_stamp_keep_2">¡Bien!</string>
+    <string name="swiper_stamp_keep_3">¡Sí!</string>
+    <string name="swiper_stamp_keep_4">¡Guardado!</string>
+    <string name="swiper_stamp_delete_1">¡Nel!</string>
+    <string name="swiper_stamp_delete_2">¡Adiós!</string>
+    <string name="swiper_stamp_delete_3">¡A la basura!</string>
+    <string name="swiper_stamp_delete_4">¡Fuera!</string>
+    <string name="swiper_stamp_skip_1">¡Paso!</string>
+    <string name="swiper_stamp_skip_2">¡Mmm!</string>
+    <string name="swiper_stamp_skip_3">¡Luego!</string>
+    <string name="swiper_stamp_skip_4">¡Quizá!</string>
+    <string name="swiper_stamp_undo_1">¡Deshacer!</string>
+    <string name="swiper_stamp_undo_2">¡Atrás!</string>
+    <string name="swiper_stamp_undo_3">¡Ups!</string>
+    <string name="swiper_stamp_undo_4">¡Espera!</string>
+    <string name="swiper_help_title">Cómo funciona Deslizar</string>
+    <string name="swiper_help_message">Desliza cada archivo para decidir:\n\n← A la izquierda: %1$s\n→ A la derecha: %2$s\n↑ Hacia arriba: saltar\n↓ Hacia abajo: deshacer (después del primero)\n\nTambién puedes usar los botones de abajo.\n\nCuando termines, toca \"Revisar\" para ver todo lo que elegiste. No se borra nada hasta que confirmas en esa pantalla.</string>
+    <string name="swiper_file_type_filter_title">Mostrar solo estos tipos</string>
+    <string name="swiper_file_type_filter_hint">Marca los tipos que quieres ver. Si no marcas ninguno, se ven todos.</string>
+    <string name="swiper_file_type_category_images">Imágenes</string>
+    <string name="swiper_file_type_category_images_subtitle">jpg, png, gif, webp, heic…</string>
+    <string name="swiper_file_type_category_videos">Videos</string>
+    <string name="swiper_file_type_category_videos_subtitle">mp4, mkv, avi, mov, webm…</string>
+    <string name="swiper_file_type_category_audio">Audio</string>
+    <string name="swiper_file_type_category_audio_subtitle">mp3, flac, aac, ogg, wav…</string>
+    <string name="swiper_file_type_category_documents">Documentos</string>
+    <string name="swiper_file_type_category_documents_subtitle">pdf, doc, xlsx, txt, epub…</string>
+    <string name="swiper_file_type_category_archives">Comprimidos</string>
+    <string name="swiper_file_type_category_archives_subtitle">zip, rar, 7z, tar, apk…</string>
+    <string name="swiper_file_type_filter_apply_action">Aplicar</string>
+    <string name="swiper_file_type_filter_summary">Filtrado: %1$s</string>
+    <string name="swiper_session_no_matching_files">No hay archivos que coincidan</string>
+    <string name="swiper_open_externally_action">Abrir en otra app</string>
+    <string name="tour_swiper_gestures_body">Desliza un archivo para decidir su destino: a los lados para conservarlo o borrarlo, arriba para saltarlo, abajo para deshacer. Los botones de abajo hacen lo mismo y muestran qué lado es cuál.</string>
+    <string name="tour_swiper_openin_body">Este botón abre el archivo en otra app, para verlo antes de decidir.</string>
+    <string name="tour_swiper_preview_body">Este botón abre una vista previa en pantalla completa para verlo de cerca.</string>
+    <string name="tour_swiper_actions_body">¿No te late deslizar? ¡También hay botones! Saltar lo deja para después, y mantener presionado Saltar lo excluye de futuras revisiones. Deshacer regresa tu última decisión.</string>
+    <string name="tour_swiper_review_body">Lo que decides conservar o borrar queda en espera. Abre Revisar para repasarlo y borrar cuando estés listo.</string>
+</resources>

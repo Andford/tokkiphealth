@@ -405,8 +405,8 @@
     </plurals>
     <string name="anniversary_share_title">Share your Tokkip Health anniversary</string>
     <plurals name="anniversary_share_text">
-        <item quantity="one">%1$d year with Tokkip Health — Freed space: %2$s. Keeping your Android clean and tidy. #SDMaid\nTry it: %3$s</item>
-        <item quantity="other">%1$d years with Tokkip Health — Freed space: %2$s. Keeping your Android clean and tidy. #SDMaid\nTry it: %3$s</item>
+        <item quantity="one">%1$d year with Tokkip Health — Freed space: %2$s. Keeping your Android clean and tidy. #TokkipHealth\nTry it: %3$s</item>
+        <item quantity="other">%1$d years with Tokkip Health — Freed space: %2$s. Keeping your Android clean and tidy. #TokkipHealth\nTry it: %3$s</item>
     </plurals>
     <string name="shortcut_onetap_short">Scan + Delete</string>
     <string name="shortcut_onetap_long">Scan and delete in one action</string>
