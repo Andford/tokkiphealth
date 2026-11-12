@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="automation_accessibility_service_description">Este servicio deja que Tokkip Health haga por ti tareas que a mano serían tediosas (por ejemplo, borrar cachés).\n\nEjemplo: si le pides a Tokkip Health que detenga varias apps, puede usar este servicio para abrir los ajustes de cada una, encontrar el botón \"Forzar detención\" y tocarlo.\n\nTokkip Health siempre te muestra claramente cuándo lo está usando y te deja cancelar en cualquier momento.\n\nNo hace nada sin que tú lo apruebes antes. Puedes desactivar el servicio cuando quieras, sin problemas.</string>
+    <string name="automation_screenoverlay_explanation">Tokkip Health está usando tu teléfono. Mientras tanto no puedes usar la pantalla. Espera a que termine o cancélalo.</string>
+    <string name="automation_screenoverlay_explanation_tv">Tokkip Health está usando tu dispositivo. Mientras tanto no puedes usar la pantalla. Espera a que termine o presiona Inicio para cancelar.</string>
+    <string name="automation_screenoverlay_explanation_nocancel">Tokkip Health está usando tu teléfono. Mientras tanto no puedes usar la pantalla. Espera a que termine.</string>
+    <string name="automation_active_title">Tokkip Health está trabajando</string>
+    <string name="automation_error_no_consent_title">Error de automatización</string>
+    <string name="automation_error_no_consent_body">El servicio de accesibilidad no está configurado. Termina la configuración y da tu permiso.</string>
+    <string name="automation_error_not_enabled_title">El servicio no está activado</string>
+    <string name="automation_error_not_enabled_body">El servicio de accesibilidad está apagado. Vuelve a encenderlo.</string>
+    <string name="automation_error_not_running_title">El servicio no está corriendo</string>
+    <string name="automation_error_not_running_body">El servicio de accesibilidad no está corriendo. Intenta reiniciar el teléfono.</string>
+    <string name="automation_error_screen_unavailable_title">Pantalla no disponible</string>
+    <string name="automation_error_screen_unavailable_body">Se canceló porque la pantalla dejó de estar disponible (por ejemplo, se apagó o se bloqueó).</string>
+    <string name="automation_error_compatibility_title">Compatibilidad de la automatización</string>
+    <string name="automation_error_compatibility_body">Tokkip Health no entendió cómo está acomodada la pantalla. Si sigue pasando, puede que tu idioma o tu configuración todavía no estén bien soportados. Busca actualizaciones.</string>
+    <string name="automation_error_compatibility_adb_hint">Con acceso ADB (Shizuku), Tokkip Health puede hacer casi todo esto sin el servicio de accesibilidad.</string>
+    <string name="automation_error_timeout_title">Se acabó el tiempo</string>
+    <string name="automation_error_timeout_body">Tokkip Health no terminó todos los pasos a tiempo. Si sigue pasando, la app necesita ajustes para tu teléfono. Busca actualizaciones.</string>
+    <string name="automation_error_overlay_title">Capa de automatización</string>
+    <string name="automation_error_overlay_body">Tokkip Health no pudo mostrar su capa de automatización. Revisa los permisos e intenta reiniciar el teléfono.</string>
+    <string name="automation_error_scheduler_title">Falló una automatización programada</string>
+    <string name="automation_error_scheduler_body">Una tarea programada quiso usar el servicio de accesibilidad, pero no estaba disponible. Si no lo necesitas, apaga la opción \"Servicio de accesibilidad\" en los ajustes de Programar.</string>
+    <string name="automation_error_no_settings_title">No hay pantalla de ajustes</string>
+    <string name="automation_error_no_settings_body">Esta app del sistema no tiene pantalla de ajustes, así que no se puede borrar su caché con el servicio de accesibilidad. Exclúyela para que la limpieza vaya más rápido.</string>
+    <string name="automation_error_disabled_app_title">La app está desactivada</string>
+    <string name="automation_error_disabled_app_body">Tu teléfono no abre los ajustes de apps desactivadas, así que no se puede borrar la caché con el servicio de accesibilidad. Activa la app o usa acceso root o ADB.</string>
+    <string name="automation_error_interference_title">Ajustes bloqueados</string>
+    <string name="automation_error_interference_body">Otra app (%1$s) está bloqueando los ajustes del sistema, así que Tokkip Health no puede seguir. Quita el bloqueo de apps o la protección de pantalla de esa app para los ajustes del sistema y vuelve a intentar.</string>
+    <string name="automation_loading">Preparando la automatización con el servicio de accesibilidad</string>
+    <string name="automation_progress_find_ok_confirmation">Intentando confirmar el paso anterior (palabras clave: %s)</string>
+</resources>

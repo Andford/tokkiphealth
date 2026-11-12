@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <plurals name="stats_dash_body_size">
+        <item quantity="one">Ya liberé %s.</item>
+        <item quantity="many">Ya liberé %s.</item>
+        <item quantity="other">Ya liberé %s.</item>
+    </plurals>
+    <plurals name="stats_dash_body_count">
+        <item quantity="one">%s cosa revisada desde que me invitaste a tu teléfono.</item>
+        <item quantity="many">%s cosas revisadas desde que me invitaste a tu teléfono.</item>
+        <item quantity="other">%s cosas revisadas desde que me invitaste a tu teléfono.</item>
+    </plurals>
+    <plurals name="stats_dash_since_days">
+        <item quantity="one">Contigo desde hace %d día.</item>
+        <item quantity="many">Contigo desde hace %d días.</item>
+        <item quantity="other">Contigo desde hace %d días.</item>
+    </plurals>
+    <plurals name="stats_dash_since_weeks">
+        <item quantity="one">Contigo desde hace %d semana.</item>
+        <item quantity="many">Contigo desde hace %d semanas.</item>
+        <item quantity="other">Contigo desde hace %d semanas.</item>
+    </plurals>
+    <plurals name="stats_dash_since_months">
+        <item quantity="one">Contigo desde hace %d mes.</item>
+        <item quantity="many">Contigo desde hace %d meses.</item>
+        <item quantity="other">Contigo desde hace %d meses.</item>
+    </plurals>
+    <plurals name="stats_dash_since_years">
+        <item quantity="one">Contigo desde hace %d año.</item>
+        <item quantity="many">Contigo desde hace %d años.</item>
+        <item quantity="other">Contigo desde hace %d años.</item>
+    </plurals>
+    <string name="stats_report_status_partial_success">Salió en parte</string>
+    <string name="stats_report_status_partial_failure">Falló</string>
+    <string name="stats_settings_desc">Estadísticas, reportes y cuánto tiempo se guardan.</string>
+    <string name="stats_settings_retention_category">Cuánto se guarda</string>
+    <string name="stats_settings_retention_reports_label">Reportes generales</string>
+    <string name="stats_settings_retention_reports_desc">Días antes de borrar los reportes básicos de lo que hizo Tokkip Health.</string>
+    <string name="stats_settings_retention_paths_label">Detalle de rutas</string>
+    <string name="stats_settings_retention_paths_desc">Días que se guarda el detalle de las rutas que tocó Tokkip Health.</string>
+    <string name="stats_settings_retention_snapshots_label">Historial de almacenamiento</string>
+    <string name="stats_settings_retention_snapshots_desc">Días que se guardan las fotos del uso de almacenamiento para la gráfica de Tendencia. Las más viejas se borran.</string>
+    <string name="stats_settings_reset_all_label">Reiniciar todo</string>
+    <string name="stats_settings_reset_all_desc">Borra todos los reportes y pone las estadísticas en cero.</string>
+    <string name="stats_affected_paths_label">Rutas tocadas</string>
+    <string name="stats_affected_pkgs_label">Apps tocadas</string>
+    <string name="stats_dash_body_snapshots_only">Siguiendo el historial de tu almacenamiento.</string>
+    <string name="stats_storage_trend_action">Tendencia del almacenamiento</string>
+    <string name="stats_space_history_title">Tendencia del almacenamiento</string>
+    <string name="stats_space_history_range_title">Periodo</string>
+    <string name="stats_space_history_range_7d">7 días</string>
+    <string name="stats_space_history_range_30d">30 días</string>
+    <string name="stats_space_history_range_90d">90 días</string>
+    <string name="stats_space_history_range_180d">180 días</string>
+    <string name="stats_space_history_range_365d">1 año</string>
+    <string name="stats_space_history_storage_title">Almacenamiento</string>
+    <string name="stats_space_history_current_used_label">Usado ahora</string>
+    <string name="stats_space_history_min_label">Mínimo usado</string>
+    <string name="stats_space_history_max_label">Máximo usado</string>
+    <string name="stats_space_history_delta_label">Cambio</string>
+    <string name="stats_space_history_delta_in_x">%1$s en %2$s</string>
+    <string name="stats_space_history_upgrade_title">Historial completo</string>
+    <string name="stats_space_history_upgrade_body_v3">Ve 90 días de historial por cada almacenamiento, o hasta un año si lo guardas más tiempo, y un aviso antes de quedarte sin espacio.</string>
+    <string name="stats_space_history_marker_freed">Liberé %1$s</string>
+    <string name="stats_storage_type_primary">Almacenamiento principal</string>
+    <string name="stats_storage_type_secondary">Almacenamiento secundario</string>
+    <string name="stats_storage_type_portable">Almacenamiento portátil</string>
+    <string name="stats_space_history_delete_storage_title">¿Borrar el historial de este almacenamiento?</string>
+    <string name="stats_space_history_delete_storage_desc">Se borran para siempre todos los datos de tendencia de este almacenamiento.</string>
+</resources>

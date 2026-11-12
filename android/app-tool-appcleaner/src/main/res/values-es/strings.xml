@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="appcleaner_explanation_short">Datos desechables de cada app.</string>
+    <string name="appcleaner_filter_defaultcachespublic_label">Cachés públicas normales</string>
+    <string name="appcleaner_filter_defaultcachespublic_summary">Las cachés públicas normales de las apps (en Android/data en versiones viejas). Son las que se borran con \"Borrar caché\" en los ajustes del sistema.</string>
+    <string name="appcleaner_filter_defaultcachesprivate_label">Cachés privadas normales</string>
+    <string name="appcleaner_filter_defaultcachesprivate_summary">Las cachés privadas normales de las apps. Son las que se borran con \"Borrar caché\" en los ajustes del sistema.</string>
+    <string name="appcleaner_include_systemapps_label">Incluir apps del sistema</string>
+    <string name="appcleaner_include_systemapps_summary">También revisa las apps del sistema.</string>
+    <string name="appcleaner_include_runningapps_label">Incluir apps abiertas</string>
+    <string name="appcleaner_include_runningapps_summary">También las apps que están corriendo, lo que puede causar problemas.</string>
+    <string name="appcleaner_include_inaccessible_label">Incluir cachés inaccesibles</string>
+    <string name="appcleaner_include_inaccessible_summary">Datos a los que no se puede entrar directo, pero que se borran desde los ajustes del sistema con el servicio de accesibilidad.</string>
+    <string name="appcleaner_include_minimumsize_label">Tamaño mínimo</string>
+    <string name="appcleaner_include_minimumsize_summary">Salta las apps cuyos datos desechables suman menos que esto.</string>
+    <string name="appcleaner_include_minimumage_label">Antigüedad mínima</string>
+    <string name="appcleaner_include_minimumage_summary">Salta los archivos más nuevos que esto.</string>
+    <string name="appcleaner_automation_romtype_detection_label">Detección del sistema</string>
+    <string name="appcleaner_automation_romtype_detection_summary">La automatización con accesibilidad puede fallar si Tokkip Health no reconoce bien tu sistema. Aquí puedes elegirlo a mano.</string>
+    <string name="appcleaner_filter_codecache_label">Caché de código</string>
+    <string name="appcleaner_filter_codecache_summary">Caché de código de la JVM: partes ya compiladas a código nativo.</string>
+    <string name="appcleaner_filter_advertisement_label">Datos de anuncios</string>
+    <string name="appcleaner_filter_advertisement_summary">Archivos de anuncios, por ejemplo multimedia guardada.</string>
+    <string name="appcleaner_filter_bugreporting_label">Reportes de errores</string>
+    <string name="appcleaner_filter_bugreporting_summary">Datos para reportar errores, como registros o volcados de fallos.</string>
+    <string name="appcleaner_filter_analytics_label">Analíticas</string>
+    <string name="appcleaner_filter_analytics_summary">Datos de analíticas, por ejemplo estadísticas guardadas de lo que tocas en una app.</string>
+    <string name="appcleaner_filter_hiddencaches_label">Cachés escondidas</string>
+    <string name="appcleaner_filter_hiddencaches_summary">Cachés de uso general guardadas fuera del alcance del sistema.</string>
+    <string name="appcleaner_filter_thumbnails_label">Miniaturas</string>
+    <string name="appcleaner_filter_thumbnails_summary">Vistas previas de imágenes, videos y audio.</string>
+    <string name="appcleaner_filter_gamefiles_label">Archivos de juegos</string>
+    <string name="appcleaner_filter_gamefiles_summary">Recursos de juegos que el juego vuelve a cargar al abrirlo si hace falta.</string>
+    <string name="appcleaner_filter_offlinecache_label">Caché sin conexión</string>
+    <string name="appcleaner_filter_offlinecache_summary">Archivos guardados para usar sin internet, como pedazos de mapas.</string>
+    <string name="appcleaner_filter_recyclebins_label">Papeleras</string>
+    <string name="appcleaner_filter_recyclebins_summary">Archivos borrados que se guardaron en una carpeta especial para poder recuperarlos.</string>
+    <string name="appcleaner_filter_webview_label">Archivos de WebView</string>
+    <string name="appcleaner_filter_webview_summary">Archivos que guardan las WebView que usan las apps.</string>
+    <string name="appcleaner_filter_shortcutservice_label">Íconos de accesos directos</string>
+    <string name="appcleaner_filter_shortcutservice_summary">Íconos guardados de accesos directos y menús para compartir.</string>
+    <string name="appcleaner_filter_whatsapp_backups_label">Respaldos de WhatsApp</string>
+    <string name="appcleaner_filter_whatsapp_backups_summary">Borra las copias extra de los respaldos de WhatsApp y deja solo el más reciente.</string>
+    <string name="appcleaner_filter_whatsapp_received_summary">Archivos que te mandaron por WhatsApp.</string>
+    <string name="appcleaner_filter_whatsapp_received_label">Recibidos en WhatsApp</string>
+    <string name="appcleaner_filter_whatsapp_sent_label">Enviados en WhatsApp</string>
+    <string name="appcleaner_filter_whatsapp_sent_summary">Archivos que mandaste por WhatsApp.</string>
+    <string name="appcleaner_filter_telegram_label">Multimedia de Telegram</string>
+    <string name="appcleaner_filter_telegram_summary">Archivos recibidos o enviados por Telegram.</string>
+    <string name="appcleaner_filter_threema_label">Threema</string>
+    <string name="appcleaner_filter_threema_summary">Archivos recibidos por Threema.</string>
+    <string name="appcleaner_filter_wechat_label">WeChat</string>
+    <string name="appcleaner_filter_wechat_summary">Archivos enviados o recibidos en chats y Momentos de WeChat.</string>
+    <string name="appcleaner_filter_viber_label">Viber</string>
+    <string name="appcleaner_filter_viber_summary">Multimedia guardada que se vuelve a descargar al verla en el chat.</string>
+    <string name="appcleaner_filter_qqchat_label">QQ</string>
+    <string name="appcleaner_filter_qqchat_summary">Archivos enviados o recibidos en chats de QQ.</string>
+    <string name="appcleaner_delete_all_confirmation_message">¿Borrar lo desechable de todas las apps?</string>
+    <plurals name="appcleaner_result_x_items_deleted">
+        <item quantity="one">Borré %d cosa desechable</item>
+        <item quantity="many">Borré %d cosas desechables</item>
+        <item quantity="other">Borré %d cosas desechables</item>
+    </plurals>
+    <plurals name="appcleaner_result_x_items_deleted_stopped_screen">
+        <item quantity="one">Borré %d cosa desechable; me detuve porque la pantalla se apagó o se bloqueó</item>
+        <item quantity="many">Borré %d cosas desechables; me detuve porque la pantalla se apagó o se bloqueó</item>
+        <item quantity="other">Borré %d cosas desechables; me detuve porque la pantalla se apagó o se bloqueó</item>
+    </plurals>
+    <plurals name="appcleaner_result_x_items_deleted_stopped_error">
+        <item quantity="one">Borré %d cosa desechable; me detuvo un error</item>
+        <item quantity="many">Borré %d cosas desechables; me detuvo un error</item>
+        <item quantity="other">Borré %d cosas desechables; me detuvo un error</item>
+    </plurals>
+    <plurals name="appcleaner_result_x_items_deleted_stopped_automation">
+        <item quantity="one">%1$s; %2$d caché todavía necesita el servicio de accesibilidad</item>
+        <item quantity="many">%1$s; %2$d cachés todavía necesitan el servicio de accesibilidad</item>
+        <item quantity="other">%1$s; %2$d cachés todavía necesitan el servicio de accesibilidad</item>
+    </plurals>
+    <plurals name="appcleaner_result_x_items_found">
+        <item quantity="one">Encontré %d cosa desechable</item>
+        <item quantity="many">Encontré %d cosas desechables</item>
+        <item quantity="other">Encontré %d cosas desechables</item>
+    </plurals>
+    <string name="appcleaner_automation_title">Automatización de Cachés de apps</string>
+    <string name="appcleaner_automation_subtitle_default_caches">Borrando cachés normales…</string>
+    <string name="appcleaner_automation_progress_find_storage">Buscando \"Almacenamiento\" (palabras clave: %s)</string>
+    <string name="appcleaner_automation_progress_find_clear_data">Buscando el botón \"Borrar datos\" (palabras clave: %s)</string>
+    <string name="appcleaner_automation_progress_find_clear_cache">Buscando el botón \"Borrar caché\" (palabras clave: %s)</string>
+    <string name="appcleaner_item_caches_inaccessible_title">Cachés normales</string>
+    <string name="appcleaner_item_caches_inaccessible_body">Cachés normales públicas y privadas. No se puede entrar directo, pero se pueden borrar de forma indirecta (con el servicio de accesibilidad).</string>
+    <string name="appcleaner_exclusion_limited_row_hint">Excluida, pero limpiar todas las apps de una vez sí borra estas cachés</string>
+    <string name="appcleaner_exclusion_limited_title">App excluida</string>
+    <string name="appcleaner_exclusion_limited_body">Excluiste esta app de Cachés de apps. Limpiar las cachés de todas las apps de una vez usa la limpieza general del sistema por acceso ADB, que no puede dejar fuera apps sueltas, así que la caché de esta app se borra junto con lo demás. Solo se borra la caché que ves aquí; todo lo demás que cubre la exclusión queda oculto y sin tocar.</string>
+    <string name="appcleaner_automation_unavailable_title">Servicio de accesibilidad no disponible</string>
+    <string name="appcleaner_automation_unavailable_body">Para borrar estas cachés hace falta el servicio de accesibilidad de Tokkip Health, pero no estaba disponible.</string>
+    <string name="appcleaner_delete_confirmation_message_x">¿Borrar lo desechable de %s?</string>
+    <plurals name="appcleaner_delete_confirmation_message_selected_x_items">
+        <item quantity="one">¿Borrar lo desechable de %d app elegida?</item>
+        <item quantity="many">¿Borrar lo desechable de %d apps elegidas?</item>
+        <item quantity="other">¿Borrar lo desechable de %d apps elegidas?</item>
+    </plurals>
+    <string name="appcleaner_progress_shizuku_deleting_caches">Borrando cachés con acceso ADB</string>
+    <string name="appcleaner_progress_determining_inaccessible_caches">Viendo qué cachés no son accesibles</string>
+    <string name="appcleaner_automation_error_locked_appcache_title">No se puede borrar la caché</string>
+    <string name="appcleaner_automation_error_locked_appcache_body">El sistema desactivó el botón \"Borrar caché\" de esta app. Exclúyela para que la limpieza vaya más rápido.</string>
+    <string name="appcleaner_automation_error_securitycenter_permission_title">App del sistema mal configurada</string>
+    <string name="appcleaner_automation_error_securitycenter_permission_body">A la app Seguridad de HyperOS (com.miui.securitycenter) le falta el permiso de estadísticas de uso (GET_USAGE_STATS). Eso rompe cosas como \"Borrar datos\" en los detalles de una app y la limpieza de caché con accesibilidad. Dale el permiso para que todo vuelva a funcionar.</string>
+    <string name="appcleaner_automation_compat_forcestop_hint">También puede pasar si alguien forzó hace poco la detención de la app \"IU del sistema\", por ejemplo otra app de limpieza. Entonces Android bloquea los toques automáticos de Tokkip Health hasta que reinicies el teléfono.</string>
+    <string name="appcleaner_forcestop_before_clearing_label">Forzar detención antes de limpiar</string>
+    <string name="appcleaner_forcestop_before_clearing_summary">Detiene las apps antes de borrar su caché. Ayuda con algunas apps, pero otras pueden portarse raro y tendrás que volver a abrirlas.</string>
+    <string name="appcleaner_progress_force_stopping">Deteniendo apps…</string>
+    <string name="appcleaner_progress_checking_freed_space">Viendo cuánto se liberó…</string>
+</resources>

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="appcontrol_explanation_short">Las apps instaladas en tu teléfono.</string>
+    <string name="appcontrol_toggle_app_selection_action">Activar o desactivar apps</string>
+    <string name="appcontrol_toggle_app_enable_action">Activar app</string>
+    <string name="appcontrol_toggle_app_disable_action">Desactivar app</string>
+    <string name="appcontrol_toggle_app_enable_description">Al activar una app puede volver a correr y aparecer en tu pantalla de inicio, si tiene una.</string>
+    <string name="appcontrol_toggle_app_disable_description">Al desactivar una app ya no corre y se esconde de los menús. No se pierde ningún dato.</string>
+    <string name="appcontrol_appstore_open_title">Abrir en la tienda</string>
+    <string name="appcontrol_appstore_open_description">Abre esta app en la tienda de donde se instaló.</string>
+    <string name="appcontrol_systemsettings_open_description">Abre los ajustes del sistema de esta app.</string>
+    <string name="appcontrol_app_launch_title">Abrir app</string>
+    <string name="appcontrol_app_launch_description">Abre la pantalla principal de esta app.</string>
+    <string name="appcontrol_app_forcestop_title">Forzar detención</string>
+    <string name="appcontrol_app_forcestop_description">Detiene la app y evita que se abra sola hasta que tú la abras o reinicies el teléfono.</string>
+    <string name="appcontrol_app_uninstall_description">Desinstala esta app de tu teléfono.</string>
+    <string name="appcontrol_app_exclude_add_title">Excluir app</string>
+    <string name="appcontrol_app_exclude_add_description">Que las demás herramientas de Tokkip Health no toquen esta app.</string>
+    <string name="appcontrol_app_exclude_edit_title">Editar exclusión</string>
+    <string name="appcontrol_app_exclude_edit_description">Esta app está excluida de una o más herramientas.</string>
+    <string name="appcontrol_tag_user">Usuario</string>
+    <string name="appcontrol_tag_active">Usada hace poco</string>
+    <string name="appcontrol_tag_apk_base">APK</string>
+    <string name="appcontrol_tag_apk_bundle">Bundle</string>
+    <string name="appcontrol_tag_archived">Archivada</string>
+    <string name="appcontrol_tag_uninstalled">Solo datos</string>
+    <string name="appcontrol_tag_not_installed">No instalada</string>
+    <string name="appcontrol_tag_hidden">Oculta</string>
+    <string name="appcontrol_tag_enabled">Activada</string>
+    <string name="appcontrol_tag_disabled">Desactivada</string>
+    <string name="appcontrol_tag_debug">Depuración</string>
+    <string name="appcontrol_progress_enabling_package">Activando la app</string>
+    <string name="appcontrol_progress_disabling_package">Desactivando la app</string>
+    <string name="appcontrol_list_sortmode_name_label">Nombre</string>
+    <string name="appcontrol_list_sortmode_updated_label">Última actualización</string>
+    <string name="appcontrol_list_sortmode_installed_label">Fecha de instalación</string>
+    <string name="appcontrol_list_sortmode_packagename_label">Nombre del paquete</string>
+    <string name="appcontrol_list_sortmode_size_label">Tamaño</string>
+    <string name="appcontrol_list_sortmode_screentime_label">Tiempo en pantalla</string>
+    <string name="appcontrol_list_sortmode_size_caveat_msg">Los tamaños son aproximados para que todo vaya rápido. Para datos más exactos usa Almacenamiento.</string>
+    <string name="appcontrol_list_scan_cancelled_label">Se canceló la búsqueda; no se cargó ninguna app.</string>
+    <string name="appcontrol_progress_uninstalling_app">Desinstalando la app</string>
+    <plurals name="appcontrol_uninstall_result_message_x">
+        <item quantity="one">Se desinstaló %d app</item>
+        <item quantity="many">Se desinstalaron %d apps</item>
+        <item quantity="other">Se desinstalaron %d apps</item>
+    </plurals>
+    <string name="appcontrol_archive_action">Archivar</string>
+    <string name="appcontrol_archive_selection_action">Archivar apps</string>
+    <string name="appcontrol_archive_description">Archívala para liberar espacio y conservar sus datos para restaurarla después.</string>
+    <string name="appcontrol_progress_archiving_app">Archivando la app…</string>
+    <string name="appcontrol_archive_confirmation_title">Confirmar archivado</string>
+    <plurals name="appcontrol_archive_confirmation_x">
+        <item quantity="one">¿Archivar %d app?</item>
+        <item quantity="many">¿Archivar %d apps?</item>
+        <item quantity="other">¿Archivar %d apps?</item>
+    </plurals>
+    <plurals name="appcontrol_archive_result_x">
+        <item quantity="one">%d app archivada</item>
+        <item quantity="many">%d apps archivadas</item>
+        <item quantity="other">%d apps archivadas</item>
+    </plurals>
+    <string name="appcontrol_restore_action">Restaurar</string>
+    <string name="appcontrol_restore_selection_action">Restaurar apps</string>
+    <string name="appcontrol_restore_description">Vuelve a instalar por completo la app archivada. Sus datos se conservan.</string>
+    <string name="appcontrol_progress_restoring_app">Restaurando la app…</string>
+    <string name="appcontrol_restore_confirmation_title">Confirmar restauración</string>
+    <plurals name="appcontrol_restore_confirmation_x">
+        <item quantity="one">¿Restaurar %d app?</item>
+        <item quantity="many">¿Restaurar %d apps?</item>
+        <item quantity="other">¿Restaurar %d apps?</item>
+    </plurals>
+    <plurals name="appcontrol_restore_result_x">
+        <item quantity="one">%d app restaurada</item>
+        <item quantity="many">%d apps restauradas</item>
+        <item quantity="other">%d apps restauradas</item>
+    </plurals>
+    <string name="appcontrol_app_sizes_title">Tamaño de la app</string>
+    <string name="appcontrol_app_sizes_apk_label">App</string>
+    <string name="appcontrol_app_sizes_data_label">Datos</string>
+    <string name="appcontrol_app_sizes_cache_label">Caché</string>
+    <string name="appcontrol_toggle_confirmation_title">Confirmar</string>
+    <plurals name="appcontrol_toggle_confirmation_message_x">
+        <item quantity="one">¿Cambiar si %d app está activada o desactivada?</item>
+        <item quantity="many">¿Cambiar si %d apps están activadas o desactivadas?</item>
+        <item quantity="other">¿Cambiar si %d apps están activadas o desactivadas?</item>
+    </plurals>
+    <plurals name="appcontrol_toggle_result_message_x">
+        <item quantity="one">Se cambió %d app</item>
+        <item quantity="many">Se cambiaron %d apps</item>
+        <item quantity="other">Se cambiaron %d apps</item>
+    </plurals>
+    <plurals name="appcontrol_toggle_result_skipped_x">
+        <item quantity="one">%d app no se puede activar ni desactivar</item>
+        <item quantity="many">%d apps no se pueden activar ni desactivar</item>
+        <item quantity="other">%d apps no se pueden activar ni desactivar</item>
+    </plurals>
+    <string name="appcontrol_settings_module_sizing_enabled_label">Calcular tamaños</string>
+    <string name="appcontrol_settings_module_sizing_enabled_description">Un cálculo aproximado de lo que ocupa cada app.</string>
+    <string name="appcontrol_settings_module_activity_enabled_label">Ver actividad</string>
+    <string name="appcontrol_settings_module_activity_enabled_description">Saber si una app está activa o lo estuvo hace poco.</string>
+    <string name="appcontrol_export_app_selection_action">Exportar apps</string>
+    <string name="appcontrol_export_title">Exportar app</string>
+    <string name="appcontrol_export_description">Guarda los archivos de instalación de esta app. No incluye sus datos.</string>
+    <plurals name="appcontrol_export_result_message_x">
+        <item quantity="one">Se exportó %d app</item>
+        <item quantity="many">Se exportaron %d apps</item>
+        <item quantity="other">Se exportaron %d apps</item>
+    </plurals>
+    <string name="appcontrol_progress_exporting_x">Exportando %s</string>
+    <string name="appcontrol_share_list_action">Compartir la lista</string>
+    <string name="appcontrol_share_list_title">Mis apps</string>
+    <string name="appcontrol_share_list_footer">Compartido desde Tokkip Health</string>
+    <string name="appcontrol_force_stop_selection_action">Forzar detención de apps</string>
+    <string name="appcontrol_force_stop_action">Forzar detención</string>
+    <string name="appcontrol_force_stop_confirm_title">Confirmar detención</string>
+    <plurals name="appcontrol_force_stop_confirmation_message_x">
+        <item quantity="one">¿Forzar la detención de %d app?</item>
+        <item quantity="many">¿Forzar la detención de %d apps?</item>
+        <item quantity="other">¿Forzar la detención de %d apps?</item>
+    </plurals>
+    <plurals name="appcontrol_force_stop_result_message_x">
+        <item quantity="one">Se detuvo %d app</item>
+        <item quantity="many">Se detuvieron %d apps</item>
+        <item quantity="other">Se detuvieron %d apps</item>
+    </plurals>
+    <string name="appcontrol_automation_title">Automatización de Apps</string>
+    <string name="appcontrol_automation_subtitle_force_stopping">Deteniendo…</string>
+    <string name="appcontrol_automation_progress_find_force_stop">Buscando el botón \"Forzar detención\" (palabras clave: %s)</string>
+    <string name="appcontrol_automation_subtitle_archiving">Archivando…</string>
+    <string name="appcontrol_automation_progress_find_archive">Buscando el botón \"Archivar\" (palabras clave: %s)</string>
+    <string name="appcontrol_automation_subtitle_restoring">Restaurando…</string>
+    <string name="appcontrol_automation_progress_find_restore">Buscando el botón \"Restaurar\" (palabras clave: %s)</string>
+    <string name="appcontrol_item_screentime_x_since_y_label">Tiempo en pantalla: %1$s desde %2$s</string>
+    <string name="appcontrol_item_lastupdate_x_label">Actualizada: %s</string>
+    <string name="appcontrol_item_installedat_x_label">Instalada: %s</string>
+    <string name="shortcut_appcontrol_short">Apps</string>
+    <string name="shortcut_appcontrol_long">Administrar las apps instaladas</string>
+    <string name="tour_appcontrol_search_body">Busca una app por nombre. Útil si tienes muchas.</string>
+    <string name="tour_appcontrol_filter_body">Filtra por apps de usuario o del sistema, activadas, usadas hace poco y más. Los filtros activos aparecen aquí como chips.</string>
+    <string name="tour_appcontrol_sort_body">Ordena por nombre, fecha de instalación, última actualización, tamaño o tiempo en pantalla. Toca la misma opción para invertir el orden.</string>
+    <string name="tour_appcontrol_app_row_body">Toca una app para ver sus detalles y lo que puedes hacer con ella. Mantén presionado para elegir varias y actuar sobre todas.</string>
+    <string name="appcontrol_archive_unavailable_title">No se puede archivar esta app</string>
+    <string name="appcontrol_archive_unavailable_body">El botón Archivar de los ajustes de esta app está desactivado, así que Android no la archiva.</string>
+    <string name="appcontrol_restore_unavailable_title">No se puede restaurar esta app</string>
+    <string name="appcontrol_restore_unavailable_body">El botón Restaurar de los ajustes de esta app está desactivado, así que Android no la restaura por ahora.</string>
+</resources>

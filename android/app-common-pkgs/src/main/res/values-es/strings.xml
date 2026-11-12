@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="pkgrepo_invalid_inventory_error_title">Lista de apps inválida</string>
+    <string name="pkgrepo_invalid_inventory_error_description">El sistema le dio a Tokkip Health una lista inválida de apps instaladas.</string>
+</resources>

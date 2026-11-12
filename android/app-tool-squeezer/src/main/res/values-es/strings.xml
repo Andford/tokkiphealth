@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="squeezer_explanation_short">Comprime fotos y videos para ahorrar espacio.</string>
+    <plurals name="squeezer_result_x_images_found">
+        <item quantity="one">Encontré %d archivo</item>
+        <item quantity="many">Encontré %d archivos</item>
+        <item quantity="other">Encontré %d archivos</item>
+    </plurals>
+    <plurals name="squeezer_result_x_estimated_savings">
+        <item quantity="one">Se pueden ahorrar ~%s</item>
+        <item quantity="many">Se pueden ahorrar ~%s</item>
+        <item quantity="other">Se pueden ahorrar ~%s</item>
+    </plurals>
+    <plurals name="squeezer_result_x_images_compressed">
+        <item quantity="one">Comprimí %d archivo</item>
+        <item quantity="many">Comprimí %d archivos</item>
+        <item quantity="other">Comprimí %d archivos</item>
+    </plurals>
+    <plurals name="squeezer_result_x_items_failed">
+        <item quantity="one">%d falló</item>
+        <item quantity="many">%d fallaron</item>
+        <item quantity="other">%d fallaron</item>
+    </plurals>
+    <plurals name="squeezer_result_x_metadata_unpreservable">
+        <item quantity="one">%d se quedó igual (no se podían conservar sus metadatos)</item>
+        <item quantity="many">%d se quedaron igual (no se podían conservar sus metadatos)</item>
+        <item quantity="other">%d se quedaron igual (no se podían conservar sus metadatos)</item>
+    </plurals>
+    <plurals name="squeezer_result_x_skipped_inaccessible">
+        <item quantity="one">%d archivo saltado (sin acceso)</item>
+        <item quantity="many">%d archivos saltados (sin acceso)</item>
+        <item quantity="other">%d archivos saltados (sin acceso)</item>
+    </plurals>
+    <plurals name="squeezer_result_x_skipped_lossy_aux">
+        <item quantity="one">%d saltado (para conservar HDR/profundidad)</item>
+        <item quantity="many">%d saltados (para conservar HDR/profundidad)</item>
+        <item quantity="other">%d saltados (para conservar HDR/profundidad)</item>
+    </plurals>
+    <plurals name="squeezer_result_x_skipped_motion_photo">
+        <item quantity="one">%d saltado (foto en movimiento)</item>
+        <item quantity="many">%d saltados (fotos en movimiento)</item>
+        <item quantity="other">%d saltados (fotos en movimiento)</item>
+    </plurals>
+    <plurals name="squeezer_result_x_skipped_oversized">
+        <item quantity="one">%d saltado (foto enorme)</item>
+        <item quantity="many">%d saltados (fotos enormes)</item>
+        <item quantity="other">%d saltados (fotos enormes)</item>
+    </plurals>
+    <plurals name="squeezer_result_x_skipped_protected">
+        <item quantity="one">%d saltado (protegido)</item>
+        <item quantity="many">%d saltados (protegidos)</item>
+        <item quantity="other">%d saltados (protegidos)</item>
+    </plurals>
+    <plurals name="squeezer_result_x_unchanged_not_smaller">
+        <item quantity="one">%d sin cambios (no quedaba más chico)</item>
+        <item quantity="many">%d sin cambios (no quedaban más chicos)</item>
+        <item quantity="other">%d sin cambios (no quedaban más chicos)</item>
+    </plurals>
+    <plurals name="squeezer_preview_x_images">
+        <item quantity="one">%d archivo elegido</item>
+        <item quantity="many">%d archivos elegidos</item>
+        <item quantity="other">%d archivos elegidos</item>
+    </plurals>
+    <string name="squeezer_min_size_title">Tamaño mínimo</string>
+    <string name="squeezer_min_size_description">Salta los archivos más chicos que esto.</string>
+    <string name="squeezer_min_age_title">Antigüedad mínima</string>
+    <string name="squeezer_min_age_description">Solo archivos más viejos que esto.</string>
+    <string name="squeezer_compression_settings_label">General</string>
+    <string name="squeezer_quality_description">Menos calidad deja archivos más chicos, pero se ven peor.</string>
+    <string name="squeezer_types_category_label">Fotos</string>
+    <string name="squeezer_protected_category_label">Lo que se pierde</string>
+    <string name="squeezer_video_settings_category_label">Videos</string>
+    <string name="squeezer_type_jpeg_title">JPEG</string>
+    <string name="squeezer_type_jpeg_description">Incluye fotos JPEG (.jpg, .jpeg). Se recomprimen con el codificador JPEG de Android. La fecha, la ubicación y demás datos EXIF se conservan.</string>
+    <string name="squeezer_type_webp_title">WebP</string>
+    <string name="squeezer_type_webp_description">Incluye imágenes WebP (.webp). Se recomprimen con el codificador WebP de Android. La fecha, la ubicación y demás datos EXIF se conservan.</string>
+    <string name="squeezer_type_heic_title">HEIC/HEIF</string>
+    <string name="squeezer_type_heic_description">Incluye fotos HEIC/HEIF (.heic, .heif). La fecha, la ubicación y demás datos EXIF se conservan. Los mapas HDR, los datos de profundidad y las fotos en movimiento no se pueden conservar; los archivos con varias imágenes se saltan.</string>
+    <string name="squeezer_type_video_title">Video MP4</string>
+    <string name="squeezer_type_video_description">Incluye videos MP4 (.mp4). La imagen se recomprime a menor calidad con el codificador del teléfono, el audio se copia igual y el archivo sigue siendo MP4.</string>
+    <string name="squeezer_skip_compressed_title">Saltar lo ya comprimido</string>
+    <string name="squeezer_skip_compressed_description">Salta los archivos que Tokkip Health ya comprimió.</string>
+    <string name="squeezer_exif_marker_title">Marcar en el EXIF</string>
+    <string name="squeezer_exif_marker_description">Agrega una marca al comentario EXIF de la foto para no volver a comprimirla aunque se borre el historial.</string>
+    <string name="squeezer_include_lossy_aux_title">Comprimir fotos HDR y con profundidad</string>
+    <string name="squeezer_include_lossy_aux_description">Incluye fotos con HDR o datos de profundidad. Al comprimirlas se pierden: las HDR quedan como fotos normales y las de retrato pierden los datos de su fondo desenfocado. Los HEIC con varias imágenes se siguen saltando.</string>
+    <string name="squeezer_include_motion_photos_title">Comprimir fotos en movimiento</string>
+    <string name="squeezer_include_motion_photos_description">Incluye fotos en movimiento. Al comprimirlas se queda la foto y se quita el clip de video.</string>
+    <string name="squeezer_include_oversized_title">Comprimir fotos enormes</string>
+    <string name="squeezer_include_oversized_description">Incluye fotos de 8192 píxeles o más de ancho o alto. Se reducen a la mitad, y otra vez si hace falta, hasta quedar debajo de 8192 píxeles.</string>
+    <string name="squeezer_estimated_savings_format">~%s de ahorro</string>
+    <string name="squeezer_no_savings_expected">Poco ahorro</string>
+    <string name="squeezer_current_size_format">Tamaño: %s</string>
+    <string name="squeezer_chip_compressed_before">Comprimido</string>
+    <string name="squeezer_chip_hdr_depth">HDR/profundidad</string>
+    <string name="squeezer_chip_motion_photo">En movimiento</string>
+    <string name="squeezer_chip_downscaled">Reducida</string>
+    <string name="squeezer_markers_dialog_title">Qué significan las marcas</string>
+    <string name="squeezer_markers_compressed_before_description">Tokkip Health ya comprimió este archivo. Comprimirlo otra vez pierde calidad y ahorra poco.</string>
+    <string name="squeezer_markers_hdr_depth_description">Esta foto tiene HDR o datos de profundidad que se pierden al comprimir. Una foto HDR queda normal, y una de retrato pierde la profundidad de su fondo desenfocado.</string>
+    <string name="squeezer_markers_motion_photo_description">Es una foto en movimiento. Al comprimirla se queda la foto y se quita el clip de video.</string>
+    <string name="squeezer_markers_downscaled_description">Esta foto mide 8192 píxeles o más de ancho o alto. Se reduce a la mitad, y otra vez si hace falta, hasta quedar debajo de 8192 píxeles.</string>
+    <string name="squeezer_compress_action">Comprimir</string>
+    <string name="squeezer_compress_all_action">Comprimir todo</string>
+    <string name="squeezer_preview_dialog_title">Confirmar la compresión</string>
+    <string name="squeezer_preview_total_size">Tamaño total</string>
+    <string name="squeezer_preview_estimated_savings">Ahorro aproximado</string>
+    <string name="squeezer_history_title">Historial de compresión</string>
+    <plurals name="squeezer_history_summary">
+        <item quantity="one">%1$d archivo (%2$s)</item>
+        <item quantity="many">%1$d archivos (%2$s)</item>
+        <item quantity="other">%1$d archivos (%2$s)</item>
+    </plurals>
+    <string name="squeezer_history_empty">Sin historial de compresión</string>
+    <string name="squeezer_history_clear_title">Borrar el historial de compresión</string>
+    <string name="squeezer_history_clear_message">Así lo que ya se comprimió se puede volver a comprimir. Los archivos no se tocan.</string>
+    <string name="squeezer_onboarding_original_label">Original</string>
+    <string name="squeezer_onboarding_compressed_label">Comprimida</string>
+    <string name="squeezer_onboarding_video_original_label">Cuadro del video</string>
+    <string name="squeezer_onboarding_video_compressed_label">Vista previa (aproximada)</string>
+    <string name="squeezer_onboarding_video_quality_disclaimer">La calidad real del video puede variar</string>
+    <string name="squeezer_compare_action">Comparar</string>
+    <string name="squeezer_no_example_found">No hay fotos en las rutas elegidas.</string>
+    <string name="squeezer_result_empty_message">No encontré nada que se pueda comprimir.</string>
+    <string name="squeezer_result_empty_protected">Nada que comprimir. Se saltaron: %s. Activa la opción correspondiente en los ajustes para incluirlos.</string>
+    <plurals name="squeezer_result_empty_x_lossy_aux">
+        <item quantity="one">%d foto HDR/con profundidad</item>
+        <item quantity="many">%d fotos HDR/con profundidad</item>
+        <item quantity="other">%d fotos HDR/con profundidad</item>
+    </plurals>
+    <plurals name="squeezer_result_empty_x_motion_photo">
+        <item quantity="one">%d foto en movimiento</item>
+        <item quantity="many">%d fotos en movimiento</item>
+        <item quantity="other">%d fotos en movimiento</item>
+    </plurals>
+    <plurals name="squeezer_result_empty_x_oversized">
+        <item quantity="one">%d foto enorme</item>
+        <item quantity="many">%d fotos enormes</item>
+        <item quantity="other">%d fotos enormes</item>
+    </plurals>
+    <plurals name="squeezer_setup_path_dropped_message">
+        <item quantity="one">%d lugar no sirve para comprimir y se quitó. Comprimir necesita acceso directo a la memoria interna.</item>
+        <item quantity="many">%d lugares no sirven para comprimir y se quitaron. Comprimir necesita acceso directo a la memoria interna.</item>
+        <item quantity="other">%d lugares no sirven para comprimir y se quitaron. Comprimir necesita acceso directo a la memoria interna.</item>
+    </plurals>
+    <string name="squeezer_setup_explanation">Comprimir hace más chicas tus fotos y videos para liberar espacio. La calidad baja para siempre y no se puede deshacer. Revisa bien los ajustes antes de empezar.</string>
+    <string name="squeezer_setup_paths_title">Dónde buscar</string>
+    <string name="squeezer_setup_paths_default">Elige las carpetas</string>
+    <string name="squeezer_setup_quality_title">Calidad</string>
+    <string name="squeezer_setup_age_title">Antigüedad mínima</string>
+    <string name="squeezer_setup_start_action">Empezar</string>
+    <string name="squeezer_quality_hint_very_low">Con menos de 40% de calidad las fotos pueden quedar inservibles.</string>
+    <string name="squeezer_quality_hint_low">Menos calidad ahorra más, pero pueden notarse defectos.</string>
+    <string name="squeezer_quality_hint_high">Con calidad muy alta casi no se ahorra.</string>
+    <string name="squeezer_quality_hint_normal">Buen equilibrio entre calidad y ahorro.</string>
+    <plurals name="squeezer_min_age_x_days">
+        <item quantity="one">De al menos %d día</item>
+        <item quantity="many">De al menos %d días</item>
+        <item quantity="other">De al menos %d días</item>
+    </plurals>
+    <string name="squeezer_estimated_savings_percent">Ahorro aproximado de ~%d%% en JPEG</string>
+    <string name="tour_squeezer_intro_body">Comprimir vuelve a guardar tus fotos y videos para que ocupen menos. Cambias un poco de calidad por espacio. Cada archivo muestra cuánto ahorrarías, para que decidas qué vale la pena.</string>
+    <string name="tour_squeezer_compress_body">Comprime todo de una vez aquí, o toca un archivo para comprimir solo ese. Mantén presionado para elegir varios. Siempre ves una vista previa antes de que cambie algo.</string>
+</resources>

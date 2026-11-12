@@ -49,11 +49,12 @@ android {
                 storePassword = System.getenv("TOKKIP_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("TOKKIP_KEY_ALIAS") ?: "tokkip"
                 keyPassword = System.getenv("TOKKIP_KEY_PASSWORD") ?: System.getenv("TOKKIP_KEYSTORE_PASSWORD")
-            } else {
-                initWith(getByName("debug"))
             }
         }
     }
+    // Without Tokkip's key (no secrets): the debug key, which AGP creates when missing.
+    val tokkipKey = System.getenv("TOKKIP_KEYSTORE")?.let { File(it).exists() } == true
+    val releaseSigning = if (tokkipKey) signingConfigs["tokkip"] else signingConfigs["debug"]
 
     buildTypes {
         all {
@@ -63,13 +64,13 @@ android {
             )
         }
         create("beta") {
-            signingConfig = signingConfigs["tokkip"]
+            signingConfig = releaseSigning
             proguardFiles("proguard-foss.pro")
             isMinifyEnabled = true
             isShrinkResources = true
         }
         release {
-            signingConfig = signingConfigs["tokkip"]
+            signingConfig = releaseSigning
             proguardFiles("proguard-foss.pro")
             isMinifyEnabled = true
             isShrinkResources = true

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="corpsefinder_explanation_short">Datos de apps que ya desinstalaste.</string>
+    <string name="corpsefinder_settings_summary">Filtros de búsqueda y niveles de riesgo.</string>
+    <string name="corpsefinder_settings_risk_keeper_title">Incluir restos que quizá quieras</string>
+    <string name="corpsefinder_settings_risk_keeper_summary">Archivos que tal vez quieras conservar aunque la app ya no esté, como fotos que tomaste o respaldos que hiciste.</string>
+    <string name="corpsefinder_settings_risk_common_title">Incluir nombres comunes</string>
+    <string name="corpsefinder_settings_risk_common_summary">Datos con nombres muy usados; por ejemplo, una carpeta \"Notes\" la usan demasiadas apps desconocidas.</string>
+    <string name="corpsefinder_watcher_title">Vigilar desinstalaciones</string>
+    <string name="corpsefinder_watcher_summary">Busca restos en cuanto desinstalas una app.</string>
+    <string name="corpsefinder_watcher_autodelete_title">Borrar solo</string>
+    <string name="corpsefinder_watcher_autodelete_summary">Borra solos los restos de la app que desinstalaste.</string>
+    <plurals name="corpsefinder_watcher_notification_scan_result">
+        <item quantity="one">Encontré %1$d resto al desinstalar %2$s.</item>
+        <item quantity="many">Encontré %1$d restos al desinstalar %2$s.</item>
+        <item quantity="other">Encontré %1$d restos al desinstalar %2$s.</item>
+    </plurals>
+    <plurals name="corpsefinder_watcher_notification_delete_result">
+        <item quantity="one">Limpieza lista (%1$s): liberé %2$s y quité %3$d cosa.</item>
+        <item quantity="many">Limpieza lista (%1$s): liberé %2$s y quité %3$d cosas.</item>
+        <item quantity="other">Limpieza lista (%1$s): liberé %2$s y quité %3$d cosas.</item>
+    </plurals>
+    <string name="corpsefinder_watcher_notification_delete_action">Borrar restos</string>
+    <string name="corpsefinder_filter_publicmedia_label">Multimedia pública</string>
+    <string name="corpsefinder_filter_publicmedia_summary">Archivos multimedia públicos, por ejemplo lo que te llega por apps de mensajes.</string>
+    <string name="corpsefinder_filter_publicobb_label">Recursos OBB</string>
+    <string name="corpsefinder_filter_publicobb_summary">Recursos extra de apps, por ejemplo los de juegos.</string>
+    <string name="corpsefinder_filter_publicdata_label">Datos públicos de apps</string>
+    <string name="corpsefinder_filter_publicdata_summary">Datos de apps no sensibles, por ejemplo cachés de mapas.</string>
+    <string name="corpsefinder_filter_sdcard_label">Tarjeta SD</string>
+    <string name="corpsefinder_filter_sdcard_summary">Almacenamiento público general, interno y externo (como tarjetas SD).</string>
+    <string name="corpsefinder_filter_privatedata_label">Datos privados de apps</string>
+    <string name="corpsefinder_filter_privatedata_summary">Datos privados de apps, como credenciales y ajustes, pero también cachés de navegador.</string>
+    <string name="corpsefinder_filter_dalvik_label">Caché Dalvik</string>
+    <string name="corpsefinder_filter_dalvik_summary">Datos de ejecución de apps en caché.</string>
+    <string name="corpsefinder_filter_artprofiles_label">Perfiles ART</string>
+    <string name="corpsefinder_filter_artprofiles_summary">Android usa los perfiles ART para que las apps corran mejor.</string>
+    <string name="corpsefinder_filter_applib_label">Bibliotecas de apps</string>
+    <string name="corpsefinder_filter_applib_summary">Datos de bibliotecas de las apps.</string>
+    <string name="corpsefinder_filter_appsource_label">Instaladores de apps</string>
+    <string name="corpsefinder_filter_appsource_summary">Datos de instalación de apps, es decir, donde van los APK.</string>
+    <string name="corpsefinder_filter_appsource_private_label">Instaladores privados de apps</string>
+    <string name="corpsefinder_filter_appsource_private_summary">Datos de instalación restringidos, por ejemplo de apps protegidas.</string>
+    <string name="corpsefinder_filter_appasec_label">Recursos de apps cifrados</string>
+    <string name="corpsefinder_filter_appasec_summary">Recursos de apps cifrados, por ejemplo los de juegos.</string>
+    <plurals name="corpsefinder_result_x_corpses_deleted">
+        <item quantity="one">Borré %d resto de app</item>
+        <item quantity="many">Borré %d restos de apps</item>
+        <item quantity="other">Borré %d restos de apps</item>
+    </plurals>
+    <plurals name="corpsefinder_result_x_corpses_found">
+        <item quantity="one">Encontré %d resto de app</item>
+        <item quantity="many">Encontré %d restos de apps</item>
+        <item quantity="other">Encontré %d restos de apps</item>
+    </plurals>
+    <string name="corpsefinder_delete_all_confirmation_message">¿Borrar todos los restos de apps?</string>
+    <string name="corpsefinder_owners_label">Dueños</string>
+    <string name="corpsefinder_owner_unknown">Dueño desconocido</string>
+    <string name="corpsefinder_corpse_hint_keeper">Esto puede tener datos que quieras conservar aunque su app ya no esté, como fotos o respaldos.</string>
+    <string name="corpsefinder_corpse_hint_common">Esto tiene un nombre muy común y podría ser de apps instaladas que Tokkip Health no conoce.</string>
+    <string name="corpsefinder_risk_keeper_chip">Quizá lo quieras</string>
+    <string name="corpsefinder_risk_common_chip">Común</string>
+    <string name="corpsefinder_markers_dialog_title">Qué significan las marcas</string>
+    <string name="corpsefinder_markers_dialog_normal_label">Sin marca</string>
+    <string name="corpsefinder_markers_dialog_normal_description">Resto normal. Casi siempre se puede borrar sin miedo: son archivos de apps que ya no están instaladas.</string>
+    <string name="tour_corpsefinder_intro_body">Restos encuentra datos que dejaron apps que ya desinstalaste. Ya no son de nada instalado, así que borrarlos libera espacio. Casi todo se puede borrar sin miedo, pero revisa la marca si tienes dudas.</string>
+    <string name="tour_corpsefinder_row_body">Cada fila es un resto y la app de la que vino. La marca dice qué tan seguro está Tokkip Health de que se puede borrar; toca la ⓘ de arriba para ver qué significa cada marca.</string>
+</resources>

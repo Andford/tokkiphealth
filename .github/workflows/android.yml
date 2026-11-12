@@ -45,6 +45,8 @@ jobs:
             echo "Signing with the stable key."
           else
             echo "::warning::No TOKKIP_KEYSTORE_B64 / TOKKIP_KEYSTORE_PASSWORD secrets: this APK uses a throwaway key and will not install over a previous one."
+            mkdir -p ~/.android
+            [ -f ~/.android/debug.keystore ] || keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null
           fi
 
       - name: Build the APK

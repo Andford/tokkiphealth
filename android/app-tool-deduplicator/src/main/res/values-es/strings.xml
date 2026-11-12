@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="deduplicator_explanation_short">Encuentra archivos repetidos en tu teléfono.</string>
+    <plurals name="deduplicator_result_x_clusters_processed">
+        <item quantity="one">Borré %d duplicado</item>
+        <item quantity="many">Borré %d duplicados</item>
+        <item quantity="other">Borré %d duplicados</item>
+    </plurals>
+    <plurals name="deduplicator_result_x_clusters_found">
+        <item quantity="one">Encontré %d grupo de duplicados</item>
+        <item quantity="many">Encontré %d grupos de duplicados</item>
+        <item quantity="other">Encontré %d grupos de duplicados</item>
+    </plurals>
+    <string name="deduplicator_protection_deleteall_allowed_title">Permitir \"Borrar todos\"</string>
+    <string name="deduplicator_protection_deleteall_allowed_summary">Muestra opciones para borrar todos los archivos de un grupo de duplicados, sin dejar ninguno.</string>
+    <string name="deduplicator_search_locations_title">Dónde buscar</string>
+    <string name="deduplicator_search_locations_all_summary">Todas las áreas accesibles</string>
+    <string name="deduplicator_skip_minsize_title">Tamaño mínimo</string>
+    <string name="deduplicator_skip_minsize_description">Salta los archivos más chicos que esto.</string>
+    <string name="deduplicator_skip_uncommon_title">Saltar tipos de archivo raros</string>
+    <string name="deduplicator_skip_uncommon_description">Solo multimedia, documentos y archivos comprimidos comunes.</string>
+    <string name="deduplicator_detection_method_label">Cómo se detectan</string>
+    <string name="deduplicator_detection_method_checksum_title">Suma de comprobación</string>
+    <string name="deduplicator_detection_method_checksum_summary">Calcula una suma de comprobación de cada archivo. Si coinciden, el contenido es exactamente el mismo.</string>
+    <string name="deduplicator_detection_method_phash_title">Parecido visual</string>
+    <string name="deduplicator_detection_method_phash_summary">Encuentra archivos parecidos comparando cómo se ven (hash perceptual).</string>
+    <string name="deduplicator_detection_method_media_title">Huella de audio y video</string>
+    <string name="deduplicator_detection_method_media_summary">Encuentra videos y audios parecidos comparando su huella de audio.</string>
+    <string name="deduplicator_detection_method_similarity_caveat">Detectar por parecido puede dar falsos positivos: revísalos a mano.</string>
+    <string name="deduplicator_media_match_audio">Coincide el audio</string>
+    <string name="deduplicator_media_match_visual">Coincide el video</string>
+    <string name="deduplicator_media_match_audio_visual">Coinciden audio y video</string>
+    <plurals name="deduplicator_x_space_occupied_by_duplicates_msg">
+        <item quantity="one">Los duplicados ocupan %s</item>
+        <item quantity="many">Los duplicados ocupan %s</item>
+        <item quantity="other">Los duplicados ocupan %s</item>
+    </plurals>
+    <string name="deduplicator_average_size_label">Tamaño promedio</string>
+    <string name="deduplicator_cluster_x_label">Grupo %s</string>
+    <string name="deduplicator_delete_confirmation_message">¿Borrar todo menos una copia en todos los grupos de duplicados?</string>
+    <string name="deduplicator_delete_single_set_confirmation_message">¿Borrar todo menos una copia en este grupo de duplicados?</string>
+    <string name="deduplicator_delete_single_set_keep_none_confirmation_message">¿Borrar todos los archivos de este grupo? ¡No queda ninguno!</string>
+    <string name="deduplicator_delete_multiple_sets_confirmation_message">¿Borrar todo menos una copia en cada grupo elegido?</string>
+    <string name="deduplicator_delete_multiple_sets_keep_none_confirmation_message">¿Borrar todos los archivos de cada grupo elegido? ¡No queda ninguno!</string>
+    <string name="deduplicator_delete_all_toggle_msg">Borrar todas las copias. ¡No queda ninguna!</string>
+    <plurals name="deduplicator_delete_set_freeable_confirmation_message_x">
+        <item quantity="one">¿Borrar %1$d duplicado de este grupo y liberar %2$s? La copia que se queda no se toca.</item>
+        <item quantity="many">¿Borrar %1$d duplicados de este grupo y liberar %2$s? La copia que se queda no se toca.</item>
+        <item quantity="other">¿Borrar %1$d duplicados de este grupo y liberar %2$s? La copia que se queda no se toca.</item>
+    </plurals>
+    <string name="deduplicator_list_grid_freeable_x">%1$s por liberar</string>
+    <string name="deduplicator_action_delete_set">Borrar el grupo</string>
+    <string name="deduplicator_action_open_preview">Ver vista previa</string>
+    <string name="deduplicator_marked_for_deletion">Se va a borrar</string>
+    <string name="deduplicator_cluster_preview_image">Vista previa del grupo</string>
+    <string name="deduplicator_selection_keep_one_required">Tiene que quedar al menos un archivo por grupo. Para cambiarlo, activa \"Permitir \'Borrar todos\'\" en los ajustes.</string>
+    <string name="deduplicator_progress_comparing_files">Comparando archivos</string>
+    <string name="deduplicator_matches_exact_label">Copias exactas</string>
+    <string name="deduplicator_matches_similar_label">Archivos parecidos</string>
+    <string name="deduplicator_arbiter_title">Cuál se queda</string>
+    <string name="deduplicator_arbiter_summary">Elige qué archivos se quedan y cuáles se borran.</string>
+    <string name="deduplicator_arbiter_explanation">Al borrar duplicados, Tokkip Health decide cuál se queda revisando cada criterio en orden. El primero que deja un ganador claro decide. Arrastra para reordenar y toca para cambiar el modo.</string>
+    <string name="deduplicator_arbiter_select_mode_title">Elegir modo</string>
+    <string name="deduplicator_arbiter_configure_paths_action">Elegir rutas…</string>
+    <string name="deduplicator_arbiter_criterium_duplicate_type_title">Tipo de duplicado</string>
+    <string name="deduplicator_arbiter_criterium_duplicate_type_description">Prefiere las copias exactas sobre los parecidos.</string>
+    <string name="deduplicator_arbiter_criterium_media_provider_title">Indexado de multimedia</string>
+    <string name="deduplicator_arbiter_criterium_media_provider_description">Considera si Android tiene el archivo en su índice de multimedia.</string>
+    <string name="deduplicator_arbiter_criterium_location_title">Dónde está</string>
+    <string name="deduplicator_arbiter_criterium_location_description">Prefiere los archivos de la memoria interna o los de la externa.</string>
+    <string name="deduplicator_arbiter_criterium_nesting_title">Profundidad de carpetas</string>
+    <string name="deduplicator_arbiter_criterium_nesting_description">Prefiere archivos en carpetas menos o más profundas.</string>
+    <string name="deduplicator_arbiter_criterium_modified_title">Fecha de modificación</string>
+    <string name="deduplicator_arbiter_criterium_modified_description">Prefiere los archivos más viejos o más nuevos.</string>
+    <string name="deduplicator_arbiter_criterium_size_title">Tamaño</string>
+    <string name="deduplicator_arbiter_criterium_size_description">Prefiere los más grandes o más chicos cuando el tamaño es distinto.</string>
+    <string name="deduplicator_arbiter_criterium_preferred_path_title">Lugares preferidos</string>
+    <string name="deduplicator_arbiter_criterium_preferred_path_description">Conserva los archivos de los lugares que elegiste.</string>
+    <string name="deduplicator_arbiter_mode_prefer_checksum">Conservar copias exactas</string>
+    <string name="deduplicator_arbiter_mode_prefer_phash">Conservar los parecidos</string>
+    <string name="deduplicator_arbiter_mode_prefer_indexed">Conservar los indexados</string>
+    <string name="deduplicator_arbiter_mode_prefer_unknown">Conservar los no indexados</string>
+    <string name="deduplicator_arbiter_mode_prefer_primary">Conservar los de la memoria interna</string>
+    <string name="deduplicator_arbiter_mode_prefer_secondary">Conservar los de la memoria externa</string>
+    <string name="deduplicator_arbiter_mode_prefer_shallow">Conservar los de carpetas menos profundas</string>
+    <string name="deduplicator_arbiter_mode_prefer_deeper">Conservar los de carpetas más profundas</string>
+    <string name="deduplicator_arbiter_mode_prefer_older">Conservar los más viejos</string>
+    <string name="deduplicator_arbiter_mode_prefer_newer">Conservar los más nuevos</string>
+    <string name="deduplicator_arbiter_mode_prefer_larger">Conservar los más grandes</string>
+    <string name="deduplicator_arbiter_mode_prefer_smaller">Conservar los más chicos</string>
+    <string name="deduplicator_view_mode_groups_label">Grupos</string>
+    <string name="deduplicator_view_mode_directories_label">Carpetas</string>
+    <string name="tour_deduplicator_details_cluster_body">Todos estos archivos parecen ser lo mismo: un grupo de duplicados.</string>
+    <string name="tour_deduplicator_details_delete_mark_body">Los archivos con este ícono se van a borrar; el que queda en el grupo es el que Tokkip Health conserva. Puedes cambiar cómo se elige en \"Cuál se queda\".</string>
+</resources>

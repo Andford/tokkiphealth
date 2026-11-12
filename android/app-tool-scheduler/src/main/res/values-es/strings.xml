@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokkip Health's own Spanish (Mexican, de tú). -->
+<resources>
+    <string name="scheduler_label">Programar</string>
+    <string name="scheduler_execution_label">Siguiente vez (aproximada)</string>
+    <string name="scheduler_execution_last_label">Última vez</string>
+    <string name="scheduler_settings_label">Programar</string>
+    <string name="scheduler_settings_summary">Ajustes de las limpiezas programadas.</string>
+    <string name="scheduler_new_schedule_action">Crear programa</string>
+    <string name="scheduler_schedule_name_label">Nombre del programa</string>
+    <string name="scheduler_schedule_toggle_enabled">El programa está activo</string>
+    <string name="scheduler_schedule_toggle_disabled">El programa está apagado</string>
+    <string name="scheduler_schedule_disable_to_edit_hint">Apaga el programa para cambiarlo.</string>
+    <string name="scheduler_edit_schedule_action">Editar programa</string>
+    <string name="scheduler_schedule_time_label">Hora aproximada</string>
+    <string name="scheduler_schedule_repeat_label">Repetir cada cuántos días</string>
+    <string name="scheduler_schedule_default_name">Programa predeterminado</string>
+    <string name="scheduler_current_schedule_x_at_x">%1$s a eso de las %2$s</string>
+    <string name="scheduler_schedule_next_at_x">Previsto para %s</string>
+    <string name="scheduler_schedule_last_at_x">Última vez: %s</string>
+    <plurals name="scheduler_schedule_repeat_x_days">
+        <item quantity="one">Diario</item>
+        <item quantity="many">Cada %d días</item>
+        <item quantity="other">Cada %d días</item>
+    </plurals>
+    <string name="scheduler_inaccurate_execution_hint">Las horas son aproximadas. Android puede adelantar o atrasar un programa para ahorrar batería.</string>
+    <string name="scheduler_no_active_schedules_subtitle">No hay programas activos</string>
+    <string name="scheduler_setting_nopowersaving_title">Saltar con batería baja</string>
+    <string name="scheduler_setting_nopowersaving_summary">Si el teléfono está en ahorro de energía, se salta la ejecución programada.</string>
+    <string name="scheduler_setting_charging_title">Saltar si no está cargando</string>
+    <string name="scheduler_setting_charging_summary">Si el teléfono no está cargando, se salta la ejecución programada.</string>
+    <string name="scheduler_setting_automation_title">Servicio de accesibilidad</string>
+    <string name="scheduler_setting_automation_summary">Incluye acciones que usan el servicio de accesibilidad. Para eso Tokkip Health necesita poder usar la pantalla (o sea, desbloqueada) cuando corren las tareas.</string>
+    <string name="scheduler_notification_channel_label">Programar</string>
+    <string name="scheduler_notification_title">Tarea programada</string>
+    <string name="scheduler_notification_message">Haciendo: \"%s\"</string>
+    <string name="scheduler_notification_result_channel_label">Resultados de lo programado</string>
+    <string name="scheduler_notification_result_title">Terminó lo programado</string>
+    <string name="scheduler_notification_result_success_message">Todas las tareas programadas salieron bien.</string>
+    <string name="scheduler_notification_result_failure_message">Algunas tareas programadas fallaron o tuvieron errores. Intenta correrlas a mano.</string>
+    <string name="scheduler_notification_result_skipped_screen_unavailable">Se saltó: la pantalla estaba apagada o bloqueada</string>
+    <string name="scheduler_acs_screenlocked_hint_title">La limpieza de apps puede saltarse</string>
+    <string name="scheduler_acs_screenlocked_hint_body">Limpiar apps usa el servicio de accesibilidad, que necesita la pantalla desbloqueada. Lo programado mientras el teléfono está bloqueado se salta.\n\nUsa acceso ADB (Shizuku) o root para limpiar en segundo plano, o prográmalo para cuando estés usando el teléfono.</string>
+    <string name="scheduler_acs_screenlocked_hint_systemapps_title">Las apps del sistema pueden saltarse</string>
+    <string name="scheduler_acs_screenlocked_hint_systemapps_body">Con acceso ADB se limpian casi todas las cachés en segundo plano, pero las apps del sistema necesitan el servicio de accesibilidad, que necesita la pantalla desbloqueada. Con \"Incluir apps del sistema\" activado, esas se saltan mientras el teléfono está bloqueado.\n\nApaga \"Incluir apps del sistema\" o corre el programa con el teléfono desbloqueado.</string>
+    <string name="scheduler_commands_after_schedule_label">Comandos al terminar</string>
+    <string name="scheduler_commands_after_schedule_desc">Comandos de shell de Android que se corren al final de un programa.</string>
+    <string name="scheduler_battery_optimization_hint">Si lo programado no corre bien en segundo plano, quita la optimización de batería para Tokkip Health.</string>
+    <string name="tour_scheduler_intro_body">Tokkip Health puede limpiar solo. Elige una hora y qué herramientas corren, y hace el trabajo en segundo plano, (casi) sin abrir la app.</string>
+    <string name="tour_scheduler_create_body">Toca aquí para crear un programa nuevo y elige cuándo corre y qué herramientas incluye.</string>
+</resources>
