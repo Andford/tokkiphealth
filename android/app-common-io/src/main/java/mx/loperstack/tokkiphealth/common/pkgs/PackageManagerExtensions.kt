@@ -1,0 +1,265 @@
+package mx.loperstack.tokkiphealth.common.pkgs
+
+import android.content.ComponentName
+import android.content.pm.IPackageDataObserver
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.PackageManager.PackageInfoFlags
+import android.content.pm.SharedLibraryInfo
+import android.graphics.drawable.Drawable
+import android.os.RemoteException
+import mx.loperstack.tokkiphealth.common.debug.Bugs
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.hasApiLevel
+import mx.loperstack.tokkiphealth.common.user.UserHandle2
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.resume
+
+fun PackageManager.getPackageInfo2(
+    pkgId: Pkg.Id,
+    flags: Int = 0
+): PackageInfo? = try {
+    getPackageInfo(pkgId.name, flags)
+} catch (_: PackageManager.NameNotFoundException) {
+    null
+}
+
+fun PackageManager.getLabel2(
+    pkgId: Pkg.Id,
+): String? = getPackageInfo2(pkgId)
+    ?.applicationInfo
+    ?.let {
+        if (it.labelRes != 0) it.loadLabel(this).toString()
+        else it.nonLocalizedLabel?.toString()
+    }
+
+fun PackageManager.getIcon2(
+    pkgId: Pkg.Id,
+): Drawable? = getPackageInfo2(pkgId)
+    ?.applicationInfo
+    ?.let { if (it.icon != 0) it.loadIcon(this) else null }
+
+// Resolves icon via applicationInfo.sourceDir, bypassing PM name lookup that fails for hidden pkgs.
+fun PackageInfo.loadIconFromArchive(pm: PackageManager): Drawable? = applicationInfo
+    ?.takeIf { it.icon != 0 }
+    ?.loadIcon(pm)
+
+fun PackageManager.getPackageInfosAsUser(
+    packageName: String,
+    flags: Long,
+    userHandle: UserHandle2,
+) = try {
+    val method = PackageManager::class.java.getMethod(
+        "getPackageInfoAsUser",
+        String::class.java,
+        Int::class.javaPrimitiveType,
+        Int::class.javaPrimitiveType,
+    )
+    method.invoke(this, packageName, flags.toInt(), userHandle.handleId) as PackageInfo?
+} catch (e: Exception) {
+    log(TAG, ERROR) { e.asLog() }
+    null
+}
+
+fun PackageManager.getInstalledPackagesAsUser(
+    flags: Long,
+    userHandle: UserHandle2,
+) = try {
+    if (hasApiLevel(33)) {
+        @Suppress("NewApi", "UNCHECKED_CAST")
+        try {
+            val method = PackageManager::class.java.getMethod(
+                "getInstalledPackagesAsUser",
+                PackageInfoFlags::class.java,
+                Int::class.javaPrimitiveType,
+            )
+            method.invoke(this, PackageInfoFlags.of(flags), userHandle.handleId) as List<PackageInfo>
+        } catch (_: NoSuchMethodException) {
+            @Suppress("UNCHECKED_CAST")
+            val method = PackageManager::class.java.getMethod(
+                "getInstalledPackagesAsUser",
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+            )
+            method.invoke(this, flags.toInt(), userHandle.handleId) as List<PackageInfo>
+        }
+    } else {
+        val method = PackageManager::class.java.getMethod(
+            "getInstalledPackagesAsUser",
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+        )
+        @Suppress("UNCHECKED_CAST")
+        (method.invoke(this, flags.toInt(), userHandle.handleId) as List<PackageInfo>)
+    }
+} catch (e: Exception) {
+    log(TAG, ERROR) { e.asLog() }
+    throw e
+}
+
+// WORKAROUND
+fun PackageManager.getSharedLibraries2(flags: Int): List<SharedLibraryInfo> = try {
+    getSharedLibraries(flags)
+} catch (e: Exception) {
+    log("PackageManager", ERROR) { "Failed getSharedLibraries($flags)" }
+    // https://github.com/d4rken/sdmaid-public/issues/3100
+    if (hasApiLevel(29)) throw e else emptyList()
+}
+
+fun PackageManager.toggleSelfComponent(
+    component: ComponentName,
+    enabled: Boolean,
+) {
+    log(TAG) { "toggleSelfComponent($component,$enabled)" }
+    setComponentEnabledSetting(
+        component,
+        when {
+            enabled -> PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else -> PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        },
+        PackageManager.DONT_KILL_APP
+    )
+}
+
+/**
+ * The read counterpart to [toggleSelfComponent]: `true` only for an explicit ENABLED write.
+ * `COMPONENT_ENABLED_STATE_DEFAULT` (never toggled by us) reads as `false`, which is not the same as
+ * "effectively enabled" for a component whose manifest declares `enabled="true"`.
+ */
+fun PackageManager.isSelfComponentExplicitlyEnabled(component: ComponentName): Boolean =
+    getComponentEnabledSetting(component) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+suspend fun PackageManager.freeStorageAndNotify(
+    desiredBytes: Long = Long.MAX_VALUE - 1000L,
+    storageId: String? = null,
+    timeout: Long = 30 * 1000L
+): Boolean {
+    val packageManager = this
+
+    val freeStorageAndNotifyMethod = packageManager.javaClass.getMethod(
+        "freeStorageAndNotify",
+        String::class.java,
+        Long::class.javaPrimitiveType,
+        IPackageDataObserver::class.java
+    )
+
+    return withTimeout(timeout) {
+        suspendCancellableCoroutine { continuation ->
+            try {
+                if (Bugs.isDryRun) {
+                    continuation.resume(true)
+                    return@suspendCancellableCoroutine
+                }
+
+                freeStorageAndNotifyMethod.invoke(
+                    packageManager,
+                    storageId,
+                    desiredBytes,
+                    object : IPackageDataObserver.Stub() {
+                        @Throws(RemoteException::class)
+                        override fun onRemoveCompleted(packageName: String?, succeeded: Boolean) {
+                            // `succeeded` is deliberately logged but NOT propagated. It reports
+                            // whether the requested amount of space was freed, and we ask for
+                            // Long.MAX_VALUE, so it is false even when the trim cleared everything
+                            // it could. Observed on a device where caches provably went to zero
+                            // (including packages we have no filesystem access to) while this
+                            // still reported false. Turning it into a failure would send every
+                            // package to the accessibility fallback, minutes of automation for
+                            // work that already succeeded. Judge the outcome by re-reading the
+                            // cache sizes instead, as InaccessibleDeleter does.
+                            log(TAG, VERBOSE) { "freeStorageAndNotify() $packageName -> $succeeded" }
+                            continuation.resume(true)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                log(TAG, WARN) { "freeStorageAndNotify($desiredBytes,$storageId) failed: ${e.asLog()}" }
+                continuation.resume(false)
+            }
+        }
+    }
+}
+
+/**
+ * Requires android.permission.DELETE_CACHE_FILES
+ */
+suspend fun PackageManager.deleteApplicationCacheFiles(
+    packageName: String
+): Boolean {
+    val packageManager = this
+
+    val deleteApplicationCacheFilesMethod = packageManager.javaClass.getMethod(
+        "deleteApplicationCacheFiles",
+        String::class.java,
+        IPackageDataObserver::class.java
+    )
+
+    return withTimeout(20 * 1000L) {
+        suspendCancellableCoroutine { continuation ->
+            try {
+                deleteApplicationCacheFilesMethod.invoke(
+                    packageManager,
+                    packageName,
+                    object : IPackageDataObserver.Stub() {
+                        @Throws(RemoteException::class)
+                        override fun onRemoveCompleted(packageName: String?, succeeded: Boolean) {
+                            log(TAG, VERBOSE) { "deleteApplicationCacheFiles() $packageName -> $succeeded" }
+                            continuation.resume(succeeded)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                log(TAG, WARN) { "deleteApplicationCacheFiles($packageName) failed: ${e.asLog()}" }
+                continuation.resume(false)
+            }
+        }
+    }
+}
+
+/**
+ * Requires android.permission.INTERNAL_DELETE_CACHE_FILES
+ */
+suspend fun PackageManager.deleteApplicationCacheFilesAsUser(
+    packageName: String,
+    userId: Int,
+): Boolean {
+    val packageManager = this
+
+    val deleteApplicationCacheFilesAsUserMethod = packageManager.javaClass.getMethod(
+        "deleteApplicationCacheFilesAsUser",
+        String::class.java,
+        Int::class.javaPrimitiveType,
+        IPackageDataObserver::class.java
+    )
+
+    return withTimeout(20 * 1000L) {
+        suspendCancellableCoroutine { continuation ->
+            try {
+                deleteApplicationCacheFilesAsUserMethod.invoke(
+                    packageManager,
+                    packageName,
+                    userId,
+                    object : IPackageDataObserver.Stub() {
+                        @Throws(RemoteException::class)
+                        override fun onRemoveCompleted(packageName: String?, succeeded: Boolean) {
+                            log(TAG, VERBOSE) { "deleteApplicationCacheFilesAsUser() $packageName -> $succeeded" }
+                            continuation.resume(succeeded)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                log(TAG, WARN) { "deleteApplicationCacheFilesAsUser($packageName,$userId) failed: ${e.asLog()}" }
+                continuation.resume(false)
+            }
+        }
+    }
+}
+
+
+private val TAG = logTag("PackageManager", "Extensions")

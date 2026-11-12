@@ -1,0 +1,202 @@
+package mx.loperstack.tokkiphealth.systemcleaner.core.filter.stock
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.twotone.FolderOpen
+import androidx.compose.ui.graphics.vector.ImageVector
+import dagger.Binds
+import dagger.Module
+import dagger.Reusable
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
+import mx.loperstack.tokkiphealth.systemcleaner.R
+import mx.loperstack.tokkiphealth.common.areas.DataArea
+import mx.loperstack.tokkiphealth.common.ca.CaString
+import mx.loperstack.tokkiphealth.common.ca.toCaString
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.Bugs
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APathLookup
+import mx.loperstack.tokkiphealth.common.files.FileType
+import mx.loperstack.tokkiphealth.common.files.GatewaySwitch
+import mx.loperstack.tokkiphealth.common.files.lookupFilesFlow
+import mx.loperstack.tokkiphealth.common.files.matches
+import mx.loperstack.tokkiphealth.common.files.segs
+import mx.loperstack.tokkiphealth.common.sieve.SegmentCriterium
+import mx.loperstack.tokkiphealth.common.sieve.SegmentCriterium.Mode
+import mx.loperstack.tokkiphealth.common.sieve.TypeCriterium
+import mx.loperstack.tokkiphealth.systemcleaner.core.SystemCleanerSettings
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.BaseSystemCleanerFilter
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.SystemCleanerFilter
+import mx.loperstack.tokkiphealth.systemcleaner.core.sieve.SystemCrawlerSieve
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.firstOrNull
+import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Provider
+
+
+class EmptyDirectoryFilter @Inject constructor(
+    private val sieveFactory: SystemCrawlerSieve.Factory,
+    private val gatewaySwitch: GatewaySwitch,
+) : BaseSystemCleanerFilter() {
+
+    override val icon: ImageVector = Icons.TwoTone.FolderOpen
+
+    override suspend fun getLabel(): CaString = R.string.systemcleaner_filter_emptydirectories_label.toCaString()
+
+    override suspend fun getDescription(): CaString =
+        R.string.systemcleaner_filter_emptydirectories_summary.toCaString()
+
+    override suspend fun targetAreas(): Set<DataArea.Type> = setOf(
+        DataArea.Type.SDCARD,
+        DataArea.Type.PUBLIC_DATA,
+        DataArea.Type.PUBLIC_MEDIA,
+        DataArea.Type.PORTABLE,
+    )
+
+    private lateinit var sieve: SystemCrawlerSieve
+    private val protectedBaseDirs = setOf(
+        segs("Camera"),
+        segs("Photos"),
+        segs("Music"),
+        segs("DCIM"),
+        segs("Pictures"),
+        segs("Movies"),
+        segs("Recordings"),
+        segs("Video"),
+        segs("Download"),
+        segs("Audiobooks"),
+        segs("Documents"),
+        segs("Alarms"),
+        segs("Ringtones"),
+        segs("Notifications"),
+        segs("Podcasts"),
+        segs("Android", "data"),
+        segs("Android", "media"),
+        segs("Android", "obb"),
+    )
+
+    private val pkgAreas = setOf(
+        DataArea.Type.PUBLIC_DATA,
+        DataArea.Type.PUBLIC_MEDIA,
+        DataArea.Type.PUBLIC_OBB,
+    )
+
+    private val protectedSubDirs = setOf(
+        "files",
+        "cache",
+    )
+
+    private val subtreeCache = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+
+    override suspend fun initialize() {
+        val config = SystemCrawlerSieve.Config(
+            targetTypes = setOf(TypeCriterium.DIRECTORY),
+            areaTypes = targetAreas(),
+            pathExclusions = setOf(
+                SegmentCriterium(segs("mnt", "asec"), mode = Mode.Contain()),
+                SegmentCriterium(segs("mnt", "obb"), mode = Mode.Contain()),
+                SegmentCriterium(segs("mnt", "secure"), mode = Mode.Contain()),
+                SegmentCriterium(segs("mnt", "shell"), mode = Mode.Contain()),
+                SegmentCriterium(segs("Android", "obb"), mode = Mode.Contain()),
+                SegmentCriterium(segs(".stfolder"), mode = Mode.Contain()),
+            ),
+        )
+        sieve = sieveFactory.create(config)
+
+        log(TAG) { "initialized() with $config" }
+    }
+
+    override suspend fun match(item: APathLookup<*>): SystemCleanerFilter.Match? {
+        val sieveResult = sieve.match(item)
+        if (!sieveResult.matches) return null
+
+        if (Bugs.isTrace) log(TAG, VERBOSE) { "Sieve match: ${item.path}" }
+
+        val areaInfo = sieveResult.areaInfo!!
+        val prefixFreePath = areaInfo.prefixFreeSegments
+        if (prefixFreePath.isEmpty()) return null
+
+        if (protectedBaseDirs.any { it.matches(prefixFreePath, ignoreCase = true) }) return null
+
+        // Exclude toplvl package folders in Android/data
+        if (pkgAreas.contains(areaInfo.type) && prefixFreePath.size == 1) return null
+
+        // Exclude Android/.../<pkg>/files
+        if (pkgAreas.contains(areaInfo.type) && prefixFreePath.size == 2 && protectedSubDirs.contains(prefixFreePath[1])) {
+            return null
+        }
+
+        return if (isEmptyTree(item)) SystemCleanerFilter.Match.Deletion(item) else null
+    }
+
+    /**
+     * The crawler hands an ancestor and its descendants to parallel slots, so evaluations of the
+     * same directory overlap. Whoever gets there first owns the listing, everyone else awaits it.
+     * Read failures stay cached: every ancestor rethrows the same error instead of relisting.
+     */
+    private suspend fun isEmptyTree(item: APathLookup<*>): Boolean {
+        if (subtreeCache.size >= MAX_CACHE_ENTRIES) {
+            log(TAG, WARN) { "Subtree cache full, clearing" }
+            subtreeCache.clear()
+        }
+
+        val mine = CompletableDeferred<Boolean>()
+        subtreeCache.putIfAbsent(item.path, mine)?.let { return it.await() }
+
+        try {
+            // Check for nested empty directories. Stream the children and stop at the first file:
+            // huge directories (e.g. 30k+ files in AnkiDroid's collection.media) would otherwise be
+            // fully listed over IPC just to determine "not empty".
+            val subDirs = mutableListOf<APathLookup<*>>()
+            val blockingChild = item.lookupFilesFlow(gatewaySwitch).firstOrNull { child ->
+                if (child.fileType == FileType.DIRECTORY) {
+                    subDirs.add(child)
+                    false
+                } else {
+                    true
+                }
+            }
+            val result = blockingChild == null && subDirs.all { match(it) != null }
+            mine.complete(result)
+            return result
+        } catch (e: Throwable) {
+            if (e is CancellationException) subtreeCache.remove(item.path, mine)
+            mine.completeExceptionally(e)
+            throw e
+        }
+    }
+
+    override suspend fun process(
+        matches: Collection<SystemCleanerFilter.Match>
+    ): Collection<SystemCleanerFilter.Processed> {
+        return matches.filterIsInstance<SystemCleanerFilter.Match.Deletion>().deleteAll(gatewaySwitch)
+    }
+
+    override fun toString(): String = "${this::class.simpleName}(${hashCode()})"
+
+    @Reusable
+    class Factory @Inject constructor(
+        private val settings: SystemCleanerSettings,
+        private val filterProvider: Provider<EmptyDirectoryFilter>
+    ) : SystemCleanerFilter.Factory {
+        override suspend fun isEnabled(): Boolean = settings.filterEmptyDirectoriesEnabled.value()
+        override suspend fun create(): SystemCleanerFilter = filterProvider.get()
+    }
+
+    @InstallIn(SingletonComponent::class)
+    @Module
+    abstract class DIM {
+        @Binds @IntoSet abstract fun mod(mod: Factory): SystemCleanerFilter.Factory
+    }
+
+    companion object {
+        private val TAG = logTag("SystemCleaner", "Filter", "EmptyDirectories")
+        private const val MAX_CACHE_ENTRIES = 100_000
+    }
+}

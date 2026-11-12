@@ -1,0 +1,1182 @@
+package mx.loperstack.tokkiphealth.setup
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import mx.loperstack.tokkiphealth.R
+import mx.loperstack.tokkiphealth.common.ca.toCaString
+import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
+import mx.loperstack.tokkiphealth.common.files.local.LocalPath
+import mx.loperstack.tokkiphealth.common.permissions.Permission
+import mx.loperstack.tokkiphealth.common.files.saf.SAFPath
+import mx.loperstack.tokkiphealth.common.pkgs.toPkgId
+import mx.loperstack.tokkiphealth.common.adb.shizuku.AdbBackend
+import mx.loperstack.tokkiphealth.common.adb.shizuku.ShizukuServiceState
+import mx.loperstack.tokkiphealth.setup.automation.AutomationSetupCardItem
+import mx.loperstack.tokkiphealth.setup.automation.AutomationSetupModule
+import mx.loperstack.tokkiphealth.setup.inventory.InventorySetupCardItem
+import mx.loperstack.tokkiphealth.setup.inventory.InventorySetupModule
+import mx.loperstack.tokkiphealth.setup.notification.NotificationSetupCardItem
+import mx.loperstack.tokkiphealth.setup.notification.NotificationSetupModule
+import mx.loperstack.tokkiphealth.setup.root.RootSetupCardItem
+import mx.loperstack.tokkiphealth.setup.root.RootSetupModule
+import mx.loperstack.tokkiphealth.setup.saf.SAFSetupCardItem
+import mx.loperstack.tokkiphealth.setup.saf.SAFSetupModule
+import mx.loperstack.tokkiphealth.setup.shizuku.ShizukuSetupCardItem
+import mx.loperstack.tokkiphealth.setup.shizuku.ShizukuSetupModule
+import mx.loperstack.tokkiphealth.setup.storage.StorageSetupCardItem
+import mx.loperstack.tokkiphealth.setup.storage.StorageSetupModule
+import io.mockk.mockk
+import java.io.File
+import java.time.Instant
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import testhelpers.compose.BaseComposeRobolectricTest
+import mx.loperstack.tokkiphealth.common.R as CommonR
+
+class SetupScreenTest : BaseComposeRobolectricTest() {
+
+    private val context: Context
+        get() = ApplicationProvider.getApplicationContext()
+
+    @Test
+    fun `loading state shows progress indicator and no cards`() {
+        composeRule.setSetupContent {
+            SetupScreen(uiState = SetupUiState.Loading)
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_notification_title)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_continue)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `complete state renders no cards and no continue button`() {
+        // Complete triggers auto-nav in the Host; the Screen just shows a loading indicator.
+        composeRule.setSetupContent {
+            SetupScreen(uiState = SetupUiState.Complete)
+        }
+
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_continue)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_notification_title)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_saf_card_title)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `onboarding mode hides data areas menu entry`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(items = emptyList()),
+                isOnboarding = true,
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.data_areas_label)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `loading card shows per-type title and loading hint`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(SetupLoadingCardItem(state = LoadingState(SetupModule.Type.SAF))),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_saf_card_title)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_progress_loading)).assertCountEquals(1)
+    }
+
+    @Test
+    fun `notification card shows body and grant button when incomplete`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        NotificationSetupCardItem(
+                            state = NotificationSetupModule.Result(
+                                missingPermission = setOf(Permission.POST_NOTIFICATIONS),
+                            ),
+                            onGrantAction = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_notification_title)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_notification_body)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(1)
+    }
+
+    @Test
+    fun `inventory card with an incomplete list shows limitation box and open settings button`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        InventorySetupCardItem(
+                            state = InventorySetupModule.Result(
+                                missingPermission = emptySet(),
+                                access = InventorySetupModule.InventoryAccess.Incomplete,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_permission_granted_label)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_limitation_title)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_limitation_body)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_limitation_body2)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_help_action)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_open_system_settings_action)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `inventory card limitation box buttons invoke settings and help actions`() {
+        var settingsClicks = 0
+        var helpClicks = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        InventorySetupCardItem(
+                            state = InventorySetupModule.Result(
+                                missingPermission = emptySet(),
+                                access = InventorySetupModule.InventoryAccess.Incomplete,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = { settingsClicks++ },
+                            onHelp = { helpClicks++ },
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_open_system_settings_action)).performClick()
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_help_action)).performClick()
+        composeRule.runOnIdle {
+            assertTrue(settingsClicks == 1)
+            // The container help icon has no text label, so the click unambiguously hit the box button.
+            assertTrue(helpClicks == 1)
+        }
+    }
+
+    @Test
+    fun `inventory card with missing permission shows grant button and no limitation box`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        InventorySetupCardItem(
+                            state = InventorySetupModule.Result(
+                                missingPermission = setOf(Permission.GET_INSTALLED_APPS),
+                                access = InventorySetupModule.InventoryAccess.NotChecked,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_limitation_title)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_permission_granted_label)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `inventory card with a failed probe shows the retry box and no settings button`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        InventorySetupCardItem(
+                            state = InventorySetupModule.Result(
+                                missingPermission = emptySet(),
+                                access = InventorySetupModule.InventoryAccess.ProbeFailed,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_probe_failed_title))
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_probe_failed_body))
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_retry_action)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_help_action)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_open_system_settings_action))
+            .assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_permission_granted_label)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_inventory_limitation_title)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `inventory card retry button invokes onRetry`() {
+        var retryClicks = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        InventorySetupCardItem(
+                            state = InventorySetupModule.Result(
+                                missingPermission = emptySet(),
+                                access = InventorySetupModule.InventoryAccess.ProbeFailed,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onHelp = {},
+                            onRetry = { retryClicks++ },
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_retry_action)).performClick()
+        composeRule.runOnIdle {
+            assertTrue(retryClicks == 1)
+        }
+    }
+
+    @Test
+    fun `inventory card probe-failed help button invokes onHelp`() {
+        var helpClicks = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        InventorySetupCardItem(
+                            state = InventorySetupModule.Result(
+                                missingPermission = emptySet(),
+                                access = InventorySetupModule.InventoryAccess.ProbeFailed,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onHelp = { helpClicks++ },
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_help_action)).performClick()
+        composeRule.runOnIdle {
+            // The container help icon has no text label, so the click unambiguously hit the box button.
+            assertTrue(helpClicks == 1)
+        }
+    }
+
+    @Test
+    fun `root card enable radio invokes onToggleUseRoot with true`() {
+        var selection: Boolean? = null
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        RootSetupCardItem(
+                            state = RootSetupModule.Result(useRoot = null),
+                            onToggleUseRoot = { selection = it },
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onNode(hasText(context.getString(R.string.setup_root_enable_root_use_label))).performClick()
+        composeRule.runOnIdle { assertTrue(selection == true) }
+    }
+
+    @Test
+    fun `root card shows the failure box when no root manager is detected`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        RootSetupCardItem(
+                            state = RootSetupModule.Result(
+                                useRoot = true,
+                                isInstalled = false,
+                                ourService = false,
+                            ),
+                            onToggleUseRoot = {},
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_failed_title)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_failed_body_nomanager))
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_waiting_label)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `root card retry button invokes onRetry`() {
+        var retryClicks = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        RootSetupCardItem(
+                            state = RootSetupModule.Result(
+                                useRoot = true,
+                                isInstalled = true,
+                                ourService = false,
+                            ),
+                            onToggleUseRoot = {},
+                            onHelp = {},
+                            onRetry = { retryClicks++ },
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_retry_action)).performClick()
+        composeRule.runOnIdle { assertTrue(retryClicks == 1) }
+    }
+
+    @Test
+    fun `root card with installed root manager and failed service shows limitation box`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        RootSetupCardItem(
+                            state = RootSetupModule.Result(
+                                useRoot = true,
+                                isInstalled = true,
+                                ourService = false,
+                            ),
+                            onToggleUseRoot = {},
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_failed_title)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_failed_body)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_waiting_label)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `root card with working root service shows ready label and no limitation box`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        RootSetupCardItem(
+                            state = RootSetupModule.Result(
+                                useRoot = true,
+                                isInstalled = true,
+                                ourService = true,
+                            ),
+                            onToggleUseRoot = {},
+                            onHelp = {},
+                            onRetry = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_ready_label)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_root_state_failed_title)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `automation card with full consent shows enabled + running states and disallow action`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        AutomationSetupCardItem(
+                            state = AutomationSetupModule.Result(
+                                isNotRequired = false,
+                                hasConsent = true,
+                                canSelfEnable = false,
+                                isServiceEnabled = true,
+                                isServiceRunning = true,
+                                isShortcutOrButtonEnabled = false,
+                                needsXiaomiAutostart = false,
+                                liftRestrictionsIntent = Intent(),
+                                showAppOpsRestrictionHint = false,
+                                showAdvancedProtectionHint = false,
+                                isAdvancedProtectionBlocked = false,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onDismiss = {},
+                            onHelp = {},
+                            onRestrictionsHelp = {},
+                            onRestrictionsShow = {},
+                            onAdvancedProtectionHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_state_enabled)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_state_running)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_consent_negative_action)).assertCountEquals(1)
+    }
+
+    @Test
+    fun `automation card advanced protection hint shows help only and no view action`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        AutomationSetupCardItem(
+                            state = AutomationSetupModule.Result(
+                                isNotRequired = false,
+                                hasConsent = true,
+                                canSelfEnable = false,
+                                isServiceEnabled = false,
+                                isServiceRunning = false,
+                                isShortcutOrButtonEnabled = false,
+                                needsXiaomiAutostart = false,
+                                liftRestrictionsIntent = Intent(),
+                                showAppOpsRestrictionHint = false,
+                                showAdvancedProtectionHint = true,
+                                isAdvancedProtectionBlocked = true,
+                                settingsIntent = Intent(),
+                            ),
+                            onGrantAction = {},
+                            onDismiss = {},
+                            onHelp = {},
+                            onRestrictionsHelp = {},
+                            onRestrictionsShow = {},
+                            onAdvancedProtectionHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_advanced_protection_title)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(mx.loperstack.tokkiphealth.common.R.string.general_help_action)).assertCountEquals(1)
+        // Advanced Protection has no per-app remedy, so the "View" action must not be offered here.
+        composeRule.onAllNodesWithText(context.getString(mx.loperstack.tokkiphealth.common.R.string.general_view_action)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `automation card advanced protection help button invokes callback`() {
+        var helpClicks = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        automationCardItem(
+                            state = automationResult(showAdvancedProtectionHint = true, isAdvancedProtectionBlocked = true),
+                            onAdvancedProtectionHelp = { helpClicks++ },
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_help_action)).performClick()
+        composeRule.runOnIdle { assertTrue(helpClicks == 1) }
+    }
+
+    @Test
+    fun `automation card appops restriction hint shows help and view actions that invoke callbacks`() {
+        var helpClicks = 0
+        var showClicks = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        automationCardItem(
+                            state = automationResult(showAppOpsRestrictionHint = true),
+                            onRestrictionsHelp = { helpClicks++ },
+                            onRestrictionsShow = { showClicks++ },
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_appops_restriction_title)).assertCountEquals(1)
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_help_action)).performClick()
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_view_action)).performClick()
+        composeRule.runOnIdle {
+            assertTrue(helpClicks == 1)
+            assertTrue(showClicks == 1)
+        }
+    }
+
+    @Test
+    fun `automation card shows the Xiaomi stopped hint when enabled but stopped on a Xiaomi ROM`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        automationCardItem(
+                            state = automationResult(
+                                isServiceEnabled = true,
+                                isServiceRunning = false,
+                                needsXiaomiAutostart = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_state_stopped_hint)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_state_stopped_hint_miui_killed))
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_state_stopped_hint_miui))
+            .assertCountEquals(0)
+    }
+
+    @Test
+    fun `automation card keeps the Xiaomi stopped hint off when the service is running`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        automationCardItem(
+                            state = automationResult(
+                                isServiceEnabled = true,
+                                isServiceRunning = true,
+                                needsXiaomiAutostart = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_acs_state_stopped_hint_miui_killed))
+            .assertCountEquals(0)
+    }
+
+    private fun automationResult(
+        isServiceEnabled: Boolean = false,
+        isServiceRunning: Boolean = false,
+        needsXiaomiAutostart: Boolean = false,
+        showAppOpsRestrictionHint: Boolean = false,
+        showAdvancedProtectionHint: Boolean = false,
+        isAdvancedProtectionBlocked: Boolean = false,
+    ) = AutomationSetupModule.Result(
+        isNotRequired = false,
+        hasConsent = true,
+        canSelfEnable = false,
+        isServiceEnabled = isServiceEnabled,
+        isServiceRunning = isServiceRunning,
+        isShortcutOrButtonEnabled = false,
+        needsXiaomiAutostart = needsXiaomiAutostart,
+        liftRestrictionsIntent = Intent(),
+        showAppOpsRestrictionHint = showAppOpsRestrictionHint,
+        showAdvancedProtectionHint = showAdvancedProtectionHint,
+        isAdvancedProtectionBlocked = isAdvancedProtectionBlocked,
+        settingsIntent = Intent(),
+    )
+
+    private fun automationCardItem(
+        state: AutomationSetupModule.Result,
+        onRestrictionsHelp: () -> Unit = {},
+        onRestrictionsShow: () -> Unit = {},
+        onAdvancedProtectionHelp: () -> Unit = {},
+    ) = AutomationSetupCardItem(
+        state = state,
+        onGrantAction = {},
+        onDismiss = {},
+        onHelp = {},
+        onRestrictionsHelp = onRestrictionsHelp,
+        onRestrictionsShow = onRestrictionsShow,
+        onAdvancedProtectionHelp = onAdvancedProtectionHelp,
+    )
+
+    @Test
+    fun `shizuku card shows root info note and open action while waiting`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        ShizukuSetupCardItem(
+                            state = ShizukuSetupModule.Result(
+                                pkg = "moe.shizuku.privileged.api".toPkgId(),
+                                useShizuku = true,
+                                isInstalled = true,
+                                serviceState = ShizukuServiceState.NotChecked,
+                                alsoHasRoot = true,
+                                backend = AdbBackend.PORTER,
+                            ),
+                            onToggleUseShizuku = {},
+                            onOpen = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        val expectedBody = buildString {
+            append(context.getString(R.string.setup_shizuku_card_body))
+            append("\n")
+            append(context.getString(R.string.setup_shizuku_card_root_info))
+        }
+        composeRule.onAllNodesWithText(expectedBody).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_shizuku_state_waiting_label)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_shizuku_card_title)).assertCountEquals(1)
+        // The button shows the manager's own name; "Open <name>" is its content description.
+        composeRule.onAllNodesWithText("Porter").assertCountEquals(1)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Porter")
+            )
+            .assertCountEquals(1)
+    }
+
+    @Test
+    fun `shizuku card still offers the manager once connected`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        ShizukuSetupCardItem(
+                            state = ShizukuSetupModule.Result(
+                                pkg = "moe.shizuku.privileged.api".toPkgId(),
+                                useShizuku = true,
+                                isInstalled = true,
+                                serviceState = ShizukuServiceState.Available,
+                                alsoHasRoot = false,
+                                managerLabel = "Shizuku",
+                            ),
+                            onToggleUseShizuku = {},
+                            onOpen = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_shizuku_card_title)).assertCountEquals(1)
+        // Connected is not a reason to hide the way into the manager: it is how a user checks on
+        // the app SD Maid actually bound to.
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Shizuku")
+            )
+            .assertCountEquals(1)
+    }
+
+    @Test
+    fun `shizuku card explains Porter's priority over an installed Shizuku`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        ShizukuSetupCardItem(
+                            state = ShizukuSetupModule.Result(
+                                pkg = "eu.darken.porter".toPkgId(),
+                                useShizuku = true,
+                                isInstalled = true,
+                                serviceState = ShizukuServiceState.Unknown,
+                                alsoHasRoot = false,
+                                backend = AdbBackend.PORTER,
+                                blockedManager = "moe.shizuku.privileged.api".toPkgId(),
+                            ),
+                            onToggleUseShizuku = {},
+                            onOpen = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        // Without labels both names fall back to the product names.
+        composeRule
+            .onAllNodesWithText(
+                context.getString(R.string.setup_shizuku_state_backend_priority_label, "Porter", "Shizuku")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_waiting_label))
+            .assertCountEquals(0)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Porter")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_not_installed_label))
+            .assertCountEquals(0)
+    }
+
+    private fun shizukuItem(
+        state: ShizukuSetupModule.Result,
+        onInstall: () -> Unit = {},
+    ) = ShizukuSetupCardItem(
+        state = state,
+        onToggleUseShizuku = {},
+        onOpen = {},
+        onHelp = {},
+        onInstall = onInstall,
+    )
+
+    private fun connectedState(
+        backend: AdbBackend = AdbBackend.SHIZUKU,
+        managerLabel: String? = null,
+    ) = ShizukuSetupModule.Result(
+        pkg = "moe.shizuku.privileged.api".toPkgId(),
+        useShizuku = true,
+        isInstalled = true,
+        serviceState = ShizukuServiceState.Available,
+        alsoHasRoot = false,
+        backend = backend,
+        managerLabel = managerLabel,
+    )
+
+    @Test
+    fun `shizuku card ready message names the detected app`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(shizukuItem(connectedState(managerLabel = "Shizuku+"))),
+                ),
+            )
+        }
+
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_service_ready_label, "Shizuku+"))
+            .assertCountEquals(1)
+    }
+
+    @Test
+    fun `shizuku card falls back to the backend name without a detected label`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(shizukuItem(connectedState(backend = AdbBackend.PORTER, managerLabel = null))),
+                ),
+            )
+        }
+
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_service_ready_label, "Porter"))
+            .assertCountEquals(1)
+    }
+
+    private fun nothingInstalledState() = ShizukuSetupModule.Result(
+        pkg = "eu.darken.porter".toPkgId(),
+        useShizuku = true,
+        isInstalled = false,
+        serviceState = ShizukuServiceState.NotChecked,
+        alsoHasRoot = false,
+    )
+
+    @Test
+    fun `shizuku card failure names the manager in both the message and its button`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        shizukuItem(
+                            connectedState(managerLabel = "Shizuku+").copy(
+                                serviceState = ShizukuServiceState.TimedOut,
+                            )
+                        )
+                    ),
+                ),
+            )
+        }
+
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_service_failed_label, "Shizuku+"))
+            .assertCountEquals(1)
+        // Same icon-plus-name button as the other states, beside Retry.
+        composeRule.onAllNodesWithText("Shizuku+").assertCountEquals(1)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Shizuku+")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(CommonR.string.general_retry_action))
+            .assertCountEquals(1)
+    }
+
+    @Test
+    fun `shizuku card offers the flavor's install target when nothing is installed`() {
+        var installed = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(shizukuItem(nothingInstalledState(), onInstall = { installed++ })),
+                ),
+            )
+        }
+
+        // Brand comes from a flavor resource, so this asserts "Install Porter" under testFoss and
+        // "Install Shizuku" under testGplay without the test knowing which it ran as.
+        val installAction = context.getString(
+            R.string.setup_shizuku_install_manager_action,
+            context.getString(R.string.setup_shizuku_install_manager_label),
+        )
+
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_not_installed_label))
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText(installAction).assertCountEquals(1)
+
+        composeRule.onNodeWithText(installAction).performClick()
+        composeRule.runOnIdle { assertTrue(installed == 1) }
+    }
+
+    @Test
+    fun `shizuku card offers Porter and no install action while Porter's priority blocks Shizuku`() {
+        // Porter IS installed here, so a store link would be a dead end.
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        shizukuItem(
+                            nothingInstalledState().copy(
+                                isInstalled = true,
+                                serviceState = ShizukuServiceState.Unknown,
+                                backend = AdbBackend.PORTER,
+                                managerLabel = "Porter",
+                                blockedManager = "moe.shizuku.privileged.api".toPkgId(),
+                                blockedManagerLabel = "Shizuku+",
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule
+            .onAllNodesWithText(
+                context.getString(R.string.setup_shizuku_state_backend_priority_label, "Porter", "Shizuku+")
+            )
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText("Porter").assertCountEquals(1)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Porter")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(
+                context.getString(
+                    R.string.setup_shizuku_install_manager_action,
+                    context.getString(R.string.setup_shizuku_install_manager_label),
+                )
+            )
+            .assertCountEquals(0)
+    }
+
+    private fun incompatibleState(
+        managerTooOld: Boolean = false,
+        sdMaidTooOld: Boolean = false,
+    ) = connectedState(managerLabel = "Shizuku+").copy(
+        serviceState = ShizukuServiceState.Failed,
+        managerTooOld = managerTooOld,
+        sdMaidTooOld = sdMaidTooOld,
+    )
+
+    @Test
+    fun `shizuku card asks to update an outdated manager`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(shizukuItem(incompatibleState(managerTooOld = true))),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_shizuku_card_title)).assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_manager_outdated_label, "Shizuku+"))
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Shizuku+")
+            )
+            .assertCountEquals(1)
+        // Retrying can't fix a version mismatch.
+        composeRule
+            .onAllNodesWithText(context.getString(CommonR.string.general_retry_action))
+            .assertCountEquals(0)
+    }
+
+    @Test
+    fun `shizuku card asks to update SD Maid when it is too old for the manager`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(shizukuItem(incompatibleState(sdMaidTooOld = true))),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_shizuku_card_title)).assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_sdmaid_outdated_label, "Shizuku+"))
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Shizuku+")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(CommonR.string.general_retry_action))
+            .assertCountEquals(0)
+    }
+
+    private fun deniedState(permanently: Boolean) = ShizukuSetupModule.Result(
+        pkg = "eu.darken.porter".toPkgId(),
+        useShizuku = true,
+        isInstalled = true,
+        serviceState = ShizukuServiceState.PermissionDenied(permanently = permanently),
+        alsoHasRoot = false,
+        backend = AdbBackend.PORTER,
+        managerLabel = "Porter",
+    )
+
+    @Test
+    fun `shizuku card offers to ask again while the manager has not allowed SD Maid`() {
+        var granted = 0
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        shizukuItem(deniedState(permanently = false)).copy(onGrantAccess = { granted++ }),
+                    ),
+                ),
+            )
+        }
+
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_permission_denied_label, "Porter"))
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_waiting_label))
+            .assertCountEquals(0)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Porter")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action))
+            .assertCountEquals(1)
+
+        composeRule.onNodeWithText(context.getString(CommonR.string.general_grant_access_action)).performClick()
+        composeRule.runOnIdle { assertTrue(granted == 1) }
+    }
+
+    @Test
+    fun `shizuku card sends the user to the manager when it denies SD Maid permanently`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(shizukuItem(deniedState(permanently = true))),
+                ),
+            )
+        }
+
+        composeRule
+            .onAllNodesWithText(
+                context.getString(R.string.setup_shizuku_state_permission_denied_permanently_label, "Porter")
+            )
+            .assertCountEquals(1)
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.setup_shizuku_state_waiting_label))
+            .assertCountEquals(0)
+        composeRule
+            .onAllNodesWithContentDescription(
+                context.getString(R.string.setup_shizuku_open_manager_action, "Porter")
+            )
+            .assertCountEquals(1)
+        // The manager refuses without prompting, so asking again from here could not help.
+        composeRule
+            .onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action))
+            .assertCountEquals(0)
+    }
+
+    @Test
+    fun `storage card renders path labels`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        StorageSetupCardItem(
+                            state = StorageSetupModule.Result(
+                                paths = listOf(
+                                    StorageSetupModule.Result.PathAccess(
+                                        label = "Public storage".toCaString(),
+                                        localPath = LocalPath.build(File("/storage/emulated/0")),
+                                        hasAccess = false,
+                                    ),
+                                ),
+                                missingPermission = setOf(Permission.READ_EXTERNAL_STORAGE),
+                            ),
+                            onPathClicked = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+        composeRule.onAllNodesWithText("Public storage").assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(1)
+    }
+
+    @Test
+    fun `storage card shows granted label per granted path and hides grant button when complete`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        StorageSetupCardItem(
+                            state = StorageSetupModule.Result(
+                                paths = listOf(
+                                    StorageSetupModule.Result.PathAccess(
+                                        label = "Public storage".toCaString(),
+                                        localPath = LocalPath.build(File("/storage/emulated/0")),
+                                        hasAccess = true,
+                                    ),
+                                    StorageSetupModule.Result.PathAccess(
+                                        label = "SD card".toCaString(),
+                                        localPath = LocalPath.build(File("/storage/ABCD-EF12")),
+                                        hasAccess = true,
+                                    ),
+                                ),
+                                missingPermission = emptySet(),
+                            ),
+                            onPathClicked = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_permission_granted_label)).assertCountEquals(2)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(0)
+    }
+
+    @Test
+    fun `saf card shows mixed access state and keeps grant action while incomplete`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        SAFSetupCardItem(
+                            state = SAFSetupModule.Result(
+                                paths = listOf(
+                                    SAFSetupModule.Result.PathAccess(
+                                        label = "Public storage".toCaString(),
+                                        safPath = SAFPath.build(
+                                            Uri.parse("content://com.android.externalstorage.documents/tree/primary%3A"),
+                                        ),
+                                        localPath = LocalPath.build(File("/storage/emulated/0")),
+                                        uriPermission = null,
+                                        grantIntent = Intent(),
+                                    ),
+                                    SAFSetupModule.Result.PathAccess(
+                                        label = "Public app data".toCaString(),
+                                        safPath = SAFPath.build(
+                                            Uri.parse("content://com.android.externalstorage.documents/tree/primary%3AAndroid%2Fdata"),
+                                        ),
+                                        localPath = LocalPath.build(File("/storage/emulated/0/Android/data")),
+                                        uriPermission = fakeUriPermission(),
+                                        grantIntent = Intent(),
+                                    ),
+                                ),
+                            ),
+                            onPathClicked = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_permission_granted_label)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(1)
+    }
+
+    @Test
+    fun `saf card hides grant action once all paths are granted`() {
+        composeRule.setSetupContent {
+            SetupScreen(
+                uiState = SetupUiState.Cards(
+                    items = listOf(
+                        SAFSetupCardItem(
+                            state = SAFSetupModule.Result(
+                                paths = listOf(
+                                    SAFSetupModule.Result.PathAccess(
+                                        label = "Public storage".toCaString(),
+                                        safPath = SAFPath.build(
+                                            Uri.parse("content://com.android.externalstorage.documents/tree/primary%3A"),
+                                        ),
+                                        localPath = LocalPath.build(File("/storage/emulated/0")),
+                                        uriPermission = fakeUriPermission(),
+                                        grantIntent = Intent(),
+                                    ),
+                                ),
+                            ),
+                            onPathClicked = {},
+                            onHelp = {},
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.setup_permission_granted_label)).assertCountEquals(1)
+        composeRule.onAllNodesWithText(context.getString(CommonR.string.general_grant_access_action)).assertCountEquals(0)
+    }
+
+    private data class LoadingState(
+        override val type: SetupModule.Type,
+        override val startAt: Instant = Instant.now(),
+    ) : SetupModule.State.Loading
+}
+
+private fun ComposeContentTestRule.setSetupContent(
+    content: @Composable () -> Unit,
+) {
+    setContent {
+        PreviewWrapper {
+            content()
+        }
+    }
+}
+
+private fun fakeUriPermission(): android.content.UriPermission =
+    mockk(relaxed = true)

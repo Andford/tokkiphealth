@@ -1,0 +1,230 @@
+package mx.loperstack.tokkiphealth.swiper.ui.status
+
+import dagger.hilt.android.lifecycle.HiltViewModel
+import mx.loperstack.tokkiphealth.common.areas.DataAreaManager
+import mx.loperstack.tokkiphealth.common.areas.isSensitiveRoot
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.matches
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.exclusion.core.ExclusionManager
+import mx.loperstack.tokkiphealth.exclusion.core.save
+import mx.loperstack.tokkiphealth.exclusion.core.types.Exclusion
+import mx.loperstack.tokkiphealth.exclusion.core.types.PathExclusion
+import mx.loperstack.tokkiphealth.main.core.taskmanager.TaskSubmitter
+import mx.loperstack.tokkiphealth.swiper.core.SwipeDecision
+import mx.loperstack.tokkiphealth.swiper.core.SwipeItem
+import mx.loperstack.tokkiphealth.swiper.core.SwipeSession
+import mx.loperstack.tokkiphealth.swiper.core.Swiper
+import mx.loperstack.tokkiphealth.swiper.core.tasks.SwiperDeleteTask
+import mx.loperstack.tokkiphealth.common.navigation.routes.SwiperSessionsRoute
+import mx.loperstack.tokkiphealth.swiper.ui.SwiperStatusRoute
+import mx.loperstack.tokkiphealth.swiper.ui.SwiperSwipeRoute
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import javax.inject.Inject
+
+@HiltViewModel
+class SwiperStatusViewModel @Inject constructor(
+    dispatcherProvider: DispatcherProvider,
+    private val swiper: Swiper,
+    private val taskSubmitter: TaskSubmitter,
+    private val exclusionManager: ExclusionManager,
+    private val dataAreaManager: DataAreaManager,
+) : ViewModel4(dispatcherProvider, tag = TAG) {
+
+    // Route deserialization via SavedStateHandle.toRoute<>() crashes with MissingFieldException
+    // even for plain `String` primitives — the Picker pattern (route through entry lambda) avoids it.
+    private val routeFlow = MutableStateFlow<SwiperStatusRoute?>(null)
+
+    private val sessionId: String? get() = routeFlow.value?.sessionId
+
+    fun bindRoute(route: SwiperStatusRoute) {
+        if (routeFlow.value != null) return
+        log(TAG, INFO) { "bindRoute(sessionId=${route.sessionId})" }
+        routeFlow.value = route
+    }
+
+    val state: StateFlow<State> = routeFlow.filterNotNull().flatMapLatest { route ->
+        val sid = route.sessionId
+        combine(
+            swiper.getSession(sid),
+            swiper.getItemsForSession(sid),
+            swiper.progress,
+            dataAreaManager.results,
+        ) { session: SwipeSession?, items: List<SwipeItem>, progress, areaResult ->
+            val keepCount = items.count { it.decision == SwipeDecision.KEEP }
+            val deleteCount = items.count { it.decision == SwipeDecision.DELETE || it.decision == SwipeDecision.DELETE_FAILED }
+            val undecidedCount = items.count { it.decision == SwipeDecision.UNDECIDED }
+            val deletedCount = items.count { it.decision == SwipeDecision.DELETED }
+            val keepSize = items.filter { it.decision == SwipeDecision.KEEP }.sumOf { it.lookup.size }
+            val deleteSize = items
+                .filter { it.decision == SwipeDecision.DELETE || it.decision == SwipeDecision.DELETE_FAILED }
+                .sumOf { it.lookup.size }
+            val undecidedSize = items.filter { it.decision == SwipeDecision.UNDECIDED }.sumOf { it.lookup.size }
+
+            val sourcePaths = session?.sourcePaths.orEmpty()
+            val areas = areaResult.getOrNull()?.areas.orEmpty()
+            val hasSensitiveRoot = sourcePaths.any { source ->
+                areas.any { it.isSensitiveRoot && source.matches(it.path) }
+            }
+            val deletionPreview = DeletionPreview.from(items, sourcePaths)
+
+            State(
+                items = items,
+                keepCount = keepCount,
+                deleteCount = deleteCount,
+                undecidedCount = undecidedCount,
+                deletedCount = deletedCount,
+                keepSize = keepSize,
+                deleteSize = deleteSize,
+                undecidedSize = undecidedSize,
+                isProcessing = progress != null,
+                alreadyKeptCount = session?.keptCount ?: 0,
+                alreadyDeletedCount = session?.deletedCount ?: 0,
+                sourcePaths = sourcePaths,
+                hasSensitiveRoot = hasSensitiveRoot,
+                areasUnavailable = areaResult.isFailure,
+                deletionPreview = deletionPreview,
+            )
+        }
+    }.safeStateIn(
+        initialValue = State(),
+        onError = { State() },
+    )
+
+    fun resetDecision(itemId: Long) = launch {
+        log(TAG, INFO) { "resetDecision($itemId)" }
+        swiper.updateDecision(itemId, SwipeDecision.UNDECIDED)
+    }
+
+    fun markKeep(itemId: Long) = launch {
+        log(TAG, INFO) { "markKeep($itemId)" }
+        swiper.updateDecision(itemId, SwipeDecision.KEEP)
+    }
+
+    fun markDelete(itemId: Long) = launch {
+        log(TAG, INFO) { "markDelete($itemId)" }
+        swiper.updateDecision(itemId, SwipeDecision.DELETE)
+    }
+
+    fun navigateToItem(itemId: Long) = launch {
+        log(TAG, INFO) { "navigateToItem($itemId)" }
+        val sid = sessionId ?: return@launch
+        // Read items directly from the source flow instead of state.value.items — the latter is
+        // governed by safeStateIn's WhileSubscribed and is only populated while a downstream
+        // collector (i.e., the Compose screen) is active. Reading the source flow keeps this
+        // method working regardless of subscriber state.
+        val items = swiper.getItemsForSession(sid).first()
+        val currentPosition = items.indexOfFirst { it.id == itemId }
+        if (currentPosition < 0) return@launch
+        navTo(
+            destination = SwiperSwipeRoute(sessionId = sid, startIndex = currentPosition),
+            popUpTo = SwiperStatusRoute(sid),
+            inclusive = true,
+        )
+    }
+
+    fun finalize() = launch {
+        log(TAG, INFO) { "finalize()" }
+        val sid = sessionId ?: return@launch
+        val deletes = swiper.getItemsForSession(sid).first().any {
+            it.decision == SwipeDecision.DELETE || it.decision == SwipeDecision.DELETE_FAILED
+        }
+        if (deletes && dataAreaManager.results.first().isFailure) {
+            log(TAG, WARN) { "finalize(): Data areas are unavailable, not deleting" }
+            return@launch
+        }
+        taskSubmitter.submit(SwiperDeleteTask(sessionId = sid))
+
+        // Room's Flow.first() runs a fresh query against the latest DB state — taskSubmitter.submit
+        // returned only after the suspend DAO calls inside performDelete committed, so we see the
+        // post-delete state here. Don't "optimize" this into reading state.value or a cached snapshot.
+        val sessionStillExists = swiper.getSession(sid).first() != null
+        if (!sessionStillExists) {
+            navToSessions()
+        }
+    }
+
+    fun retryAllFailed() = launch {
+        log(TAG, INFO) { "retryAllFailed()" }
+        val sid = sessionId ?: return@launch
+        swiper.retryAllFailed(sid)
+    }
+
+    fun done() {
+        log(TAG, INFO) { "done()" }
+        navToSessions()
+    }
+
+    fun excludeAndRemove(items: Collection<SwipeItem>) = launch {
+        log(TAG, INFO) { "excludeAndRemove(${items.size} items)" }
+        items.forEach { item ->
+            val exclusion = PathExclusion(
+                path = item.lookup.lookedUp,
+                tags = setOf(Exclusion.Tag.SWIPER),
+            )
+            exclusionManager.save(exclusion)
+            swiper.removeItem(item.id)
+        }
+    }
+
+    fun updateDecisions(items: Collection<SwipeItem>, decision: SwipeDecision) = launch {
+        log(TAG, INFO) { "updateDecisions(${items.size} items → $decision)" }
+        items.forEach { item ->
+            swiper.updateDecision(item.id, decision)
+        }
+    }
+
+    private fun navToSessions() {
+        navTo(
+            destination = SwiperSessionsRoute,
+            popUpTo = SwiperSessionsRoute,
+            inclusive = true,
+        )
+    }
+
+    data class State(
+        val items: List<SwipeItem> = emptyList(),
+        val keepCount: Int = 0,
+        val deleteCount: Int = 0,
+        val undecidedCount: Int = 0,
+        val deletedCount: Int = 0,
+        val keepSize: Long = 0,
+        val deleteSize: Long = 0,
+        val undecidedSize: Long = 0,
+        val isProcessing: Boolean = false,
+        val alreadyKeptCount: Int = 0,
+        val alreadyDeletedCount: Int = 0,
+        val sourcePaths: List<APath> = emptyList(),
+        val hasSensitiveRoot: Boolean = false,
+        /** Without data areas a sensitive root can't be ruled out, so deleting is blocked. */
+        val areasUnavailable: Boolean = false,
+        val deletionPreview: DeletionPreview = DeletionPreview(emptyList(), 0),
+    ) {
+        val canFinalize: Boolean = !isProcessing
+        val canDone: Boolean = deletedCount > 0 && deleteCount == 0 && !isProcessing
+        val hasProcessedItems: Boolean = alreadyKeptCount > 0 || alreadyDeletedCount > 0
+
+        val finalizeAction: FinalizeAction = when {
+            deletedCount > 0 && deleteCount == 0 -> FinalizeAction.DONE
+            deleteCount > 0 -> FinalizeAction.DELETE
+            keepCount > 0 -> FinalizeAction.APPLY
+            else -> FinalizeAction.HIDDEN
+        }
+    }
+
+    enum class FinalizeAction { HIDDEN, DELETE, APPLY, DONE }
+
+    companion object {
+        private val TAG = logTag("Swiper", "Status", "ViewModel")
+    }
+}

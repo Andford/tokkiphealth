@@ -1,0 +1,31 @@
+package mx.loperstack.tokkiphealth.analyzer.core.backup
+
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
+import mx.loperstack.tokkiphealth.analyzer.core.AnalyzerSettings
+import mx.loperstack.tokkiphealth.common.backup.ConfigBackupContributor
+import mx.loperstack.tokkiphealth.common.backup.DataStoreSettingsBackupContributor
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class AnalyzerSettingsBackupContributor @Inject constructor(
+    settings: AnalyzerSettings,
+) : DataStoreSettingsBackupContributor(settings.dataStore) {
+    override val key = "analyzer"
+
+    // The armed latch is runtime state, not a preference: restoring `armed = false` onto a fresh
+    // install would suppress that device's first low-space warning indefinitely.
+    override val excludedKeys = setOf("storage.low.notification.armed")
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class AnalyzerSettingsBackupModule {
+    @Binds
+    @IntoSet
+    abstract fun bind(c: AnalyzerSettingsBackupContributor): ConfigBackupContributor
+}

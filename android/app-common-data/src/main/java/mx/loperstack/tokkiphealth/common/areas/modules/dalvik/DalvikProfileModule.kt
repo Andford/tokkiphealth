@@ -1,0 +1,75 @@
+package mx.loperstack.tokkiphealth.common.areas.modules.dalvik
+
+import dagger.Binds
+import dagger.Module
+import dagger.Reusable
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
+import mx.loperstack.tokkiphealth.common.areas.DataArea
+import mx.loperstack.tokkiphealth.common.areas.hasFlags
+import mx.loperstack.tokkiphealth.common.areas.modules.DataAreaModule
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.GatewaySwitch
+import mx.loperstack.tokkiphealth.common.files.canRead
+import mx.loperstack.tokkiphealth.common.files.local.LocalGateway
+import mx.loperstack.tokkiphealth.common.files.local.LocalPath
+import mx.loperstack.tokkiphealth.common.user.UserManager2
+import javax.inject.Inject
+
+@Reusable
+class DalvikProfileModule @Inject constructor(
+    private val userManager2: UserManager2,
+    private val gatewaySwitch: GatewaySwitch,
+) : DataAreaModule {
+
+    // Unused since Android 16 (API36), "art-profiles" are now under `/data/misc/profiles`
+    override suspend fun secondPass(firstPass: Collection<DataArea>): Collection<DataArea> {
+        val gateway = gatewaySwitch.getGateway(APath.PathType.LOCAL) as LocalGateway
+
+        if (!gateway.hasRoot()) {
+            log(TAG, INFO) { "LocalGateway has no root, skipping." }
+            return emptySet()
+        }
+
+        val possibleLocation = mutableSetOf<LocalPath>()
+
+        firstPass
+            .filter { it.type == DataArea.Type.DATA }
+            .filter { it.hasFlags(DataArea.Flag.PRIMARY) }
+            .map { LocalPath.build(it.path as LocalPath, "dalvik-cache", "profiles") }
+            .run { possibleLocation.addAll(this) }
+
+        firstPass
+            .filter { it.type == DataArea.Type.DOWNLOAD_CACHE }
+            .map { LocalPath.build(it.path as LocalPath, "dalvik-cache", "profiles") }
+            .run { possibleLocation.addAll(this) }
+
+        return possibleLocation
+            .filter { gateway.exists(it, mode = LocalGateway.Mode.ROOT) }
+            .map {
+                DataArea(
+                    type = DataArea.Type.DALVIK_PROFILE,
+                    path = it,
+                    userHandle = userManager2.systemUser().handle,
+                )
+            }
+            .filter {
+                val canRead = it.path.canRead(gatewaySwitch)
+                if (!canRead) log(TAG) { "Can't read $it" }
+                canRead
+            }
+    }
+
+    @Module @InstallIn(SingletonComponent::class)
+    abstract class DIM {
+        @Binds @IntoSet abstract fun mod(mod: DalvikProfileModule): DataAreaModule
+    }
+
+    companion object {
+        val TAG: String = logTag("DataArea", "Module", "DalvikProfile")
+    }
+}

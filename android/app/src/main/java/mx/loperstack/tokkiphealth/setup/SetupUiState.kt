@@ -1,0 +1,7 @@
+package mx.loperstack.tokkiphealth.setup
+
+internal sealed interface SetupUiState {
+    data object Loading : SetupUiState
+    data class Cards(val items: List<SetupCardItem>) : SetupUiState
+    data object Complete : SetupUiState
+}

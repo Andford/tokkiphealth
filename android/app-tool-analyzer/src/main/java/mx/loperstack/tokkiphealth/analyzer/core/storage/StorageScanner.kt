@@ -1,0 +1,593 @@
+package mx.loperstack.tokkiphealth.analyzer.core.storage
+
+import mx.loperstack.tokkiphealth.analyzer.core.content.ContentGroup
+import mx.loperstack.tokkiphealth.analyzer.core.content.ContentItem
+import mx.loperstack.tokkiphealth.analyzer.core.device.DeviceStorage
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.AppCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.ContentCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.MediaCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.OtherUsersCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.SystemCategory
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.areas.DataArea
+import mx.loperstack.tokkiphealth.common.areas.DataAreaManager
+import mx.loperstack.tokkiphealth.common.areas.currentAreas
+import mx.loperstack.tokkiphealth.common.areas.hasFlags
+import mx.loperstack.tokkiphealth.common.ca.toCaString
+import mx.loperstack.tokkiphealth.common.clutter.Marker
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.APathLookup
+import mx.loperstack.tokkiphealth.common.files.GatewaySwitch
+import mx.loperstack.tokkiphealth.common.files.ReadException
+import mx.loperstack.tokkiphealth.common.files.listFiles
+import mx.loperstack.tokkiphealth.common.files.local.LocalPath
+import mx.loperstack.tokkiphealth.common.flow.throttleLatest
+import mx.loperstack.tokkiphealth.common.forensics.FileForensics
+import mx.loperstack.tokkiphealth.common.forensics.OwnerInfo
+import mx.loperstack.tokkiphealth.common.pkgs.PkgRepo
+import mx.loperstack.tokkiphealth.common.pkgs.current
+import mx.loperstack.tokkiphealth.common.pkgs.features.Installed
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.progress.increaseProgress
+import mx.loperstack.tokkiphealth.common.progress.updateProgressCount
+import mx.loperstack.tokkiphealth.common.progress.updateProgressPrimary
+import mx.loperstack.tokkiphealth.common.progress.updateProgressSecondary
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.root.canUseRootNow
+import mx.loperstack.tokkiphealth.common.storage.StorageManager2
+import mx.loperstack.tokkiphealth.common.storage.StorageVolumeX
+import mx.loperstack.tokkiphealth.common.storage.VolumeInfoX
+import mx.loperstack.tokkiphealth.common.user.UserHandle2
+import mx.loperstack.tokkiphealth.common.user.UserManager2
+import mx.loperstack.tokkiphealth.common.user.UserProfile2
+import mx.loperstack.tokkiphealth.setup.SetupHelper
+import mx.loperstack.tokkiphealth.setup.SetupModule
+import mx.loperstack.tokkiphealth.setup.isComplete
+import mx.loperstack.tokkiphealth.setup.SetupBinding
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import javax.inject.Inject
+
+
+class StorageScanner @Inject constructor(
+    private val storageManager2: StorageManager2,
+    private val pkgRepo: PkgRepo,
+    private val rootManager: RootManager,
+    private val adbManager: AdbManager,
+    private val userManager2: UserManager2,
+    private val gatewaySwitch: GatewaySwitch,
+    private val fileForensics: FileForensics,
+    private val dataAreaManager: DataAreaManager,
+    private val appScannerFactory: AppStorageScanner.Factory,
+    private val systemStorageScanner: SystemStorageScanner,
+    private val otherUserStorageScanner: OtherUserStorageScanner,
+    private val setupHelper: SetupHelper,
+    @SetupBinding(SetupModule.Type.INVENTORY) private val inventorySetupModule: SetupModule,
+    @SetupBinding(SetupModule.Type.USAGE_STATS) private val usageStatsSetupModule: SetupModule,
+) : Progress.Host, Progress.Client {
+
+    private val progressPub = MutableStateFlow<Progress.Data?>(
+        Progress.Data(primary = mx.loperstack.tokkiphealth.common.R.string.general_progress_preparing.toCaString())
+    )
+
+    override val progress: Flow<Progress.Data?> = progressPub.throttleLatest(50)
+
+    override fun updateProgress(update: (Progress.Data?) -> Progress.Data?) {
+        progressPub.value = update(progressPub.value)
+    }
+
+    private val topLevelDirs = mutableSetOf<OwnerInfo>()
+
+    private var useRoot = false
+    private var useAdb = false
+    private var dataAreas = mutableSetOf<DataArea>()
+    private var volume: StorageVolumeX? = null
+    private var otherUsers = emptySet<UserProfile2>()
+    private lateinit var currentUser: UserHandle2
+
+    suspend fun init(storage: DeviceStorage) {
+        log(TAG) { "init(): $storage" }
+        useRoot = rootManager.canUseRootNow()
+        useAdb = adbManager.canUseAdbNow()
+        currentUser = userManager2.currentUser().handle
+
+        // Cross-user access is only grantable via root/ADB. Without it we stay on the no-stats tier
+        // for other users, which is a degraded result, not a failure.
+        if (useRoot || useAdb) {
+            try {
+                if (!setupHelper.hasCrossUserAccess()) {
+                    val granted = setupHelper.setCrossUserAccess(true)
+                    log(TAG, INFO) { "init(): setCrossUserAccess(true)=$granted" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log(TAG, WARN) { "init(): Failed to gain cross-user access: ${e.asLog()}" }
+            }
+        }
+
+        val availableVolumes = storageManager2.storageVolumes
+        log(TAG) { "Available volumes:\n${availableVolumes.joinToString("\n")}" }
+
+        val candidates = availableVolumes.filter { it.uuid == storage.id.internalId }
+
+        volume = when {
+            candidates.isEmpty() -> {
+                log(TAG, WARN) { "No volume found for $storage" }
+                null
+            }
+
+            candidates.size == 1 -> {
+                candidates.single()
+            }
+
+            else -> {
+                // Weird behavior on `samsung/beyond1ltexx/beyond1:12/SP1A.210812.016/G973FXXSGHWC1:user/release-keys` with dual apps set up:
+                // scan(DeviceStorage(id=StorageId(internalId=null, externalId=41217664-9172-527a-b3d5-edabb50a7d69), label=CachedCaString("Primary storage"), type=PRIMARY, hardware=BUILT_IN, spaceCapacity=137438953472, spaceFree=36861681664, setupIncomplete=false))
+                // StorageVolumeX(uuid=null, directory=/storage/emulated/0, userlabel=Internal shared storage, volumeX=StorageVolume: Internal shared storage, rootUri=content://com.android.externalstorage.documents/root/primary)
+                // StorageVolumeX(uuid=null, directory=/storage/emulated/95, userlabel=Internal shared storage, volumeX=StorageVolume: Internal shared storage, rootUri=content://com.android.externalstorage.documents/root/primary)
+                log(TAG, WARN) { "Multiple matches for ${storage.id}" }
+                candidates.first()
+            }
+        }
+
+        log(TAG) { "Volume <> Storage mapping:\nVolume: $volume\nfor\nStorage: $storage" }
+
+        dataAreaManager.currentAreas()
+            .filter { it.hasFlags(DataArea.Flag.PRIMARY) == volume?.isPrimary }
+            .let {
+                dataAreas.clear()
+                dataAreas.addAll(it)
+            }
+
+        otherUsers = resolveOtherUsers(storage)
+        log(TAG) { "Other users on $storage: $otherUsers" }
+    }
+
+    private suspend fun resolveOtherUsers(storage: DeviceStorage): Set<UserProfile2> {
+        if (storage.type != DeviceStorage.Type.PRIMARY) return emptySet()
+        return mergeOtherUsers(
+            storageType = storage.type,
+            volumes = storageManager2.volumes,
+            named = userManager2.otherUsers(),
+            currentUser = currentUser,
+        )
+    }
+
+    suspend fun scan(storage: DeviceStorage): Collection<ContentCategory> {
+        log(TAG) { "scan($storage)" }
+
+        updateProgressPrimary(storage.label)
+        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading)
+
+        init(storage)
+
+        return gatewaySwitch.useRes {
+            fileForensics.useRes {
+                val storageDir = volume?.directory
+                    ?.let { LocalPath.build(it) }
+                    ?.let { gatewaySwitch.lookup(it, type = GatewaySwitch.Type.AUTO) }
+                log(TAG, INFO) { "Public storage dir is $storageDir for $volume" }
+
+                updateProgressSecondary(mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_progress_scanning_storage)
+
+                val storageChildren = storageDir?.lookedUp
+                    ?.listFiles(gatewaySwitch)
+                    ?.filter { storage.type == DeviceStorage.Type.PORTABLE || it.name != "Android" }
+                    ?: emptySet()
+
+                // Owner forensics needs a working app inventory. Skip it when setup is incomplete, and treat a
+                // wholesale failure as a degraded scan too: on some OEMs attribution can still throw even when setup
+                // reports complete (e.g. a stale PkgRepo error or a forensics/CSI failure), and that must not abort
+                // the whole storage overview.
+                val owners: Collection<OwnerInfo>? = when {
+                    !inventorySetupModule.isComplete() -> null
+                    else -> try {
+                        storageChildren
+                            .mapNotNull { fileForensics.findOwners(it) }
+                            .filter { setOf(DataArea.Type.SDCARD, DataArea.Type.PORTABLE).contains(it.areaInfo.type) }
+                            .onEach { log(TAG) { "Top level dir: $it" } }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        log(TAG, ERROR) { "Top-level owner forensics failed, degrading storage scan: ${e.asLog()}" }
+                        null
+                    }
+                }
+
+                topLevelDirs.clear()
+                topLevelDirs.addAll(owners ?: emptySet())
+
+                val appScan = scanForApps(storage)
+                val apps = appScan.category
+
+                // Media stays writable only while owner attribution is trustworthy end to end: top-level forensics
+                // resolved AND the app scan didn't hit an inventory failure (which leaves app-owned top-level dirs
+                // undrained — they must not surface as writable user files).
+                val ownersResolved = owners != null && !appScan.inventoryFailed
+
+                updateProgressSecondary("Scanning media files")
+                val media = storageDir
+                    ?.let { scanForMedia(storage, it, storageChildren, ownersResolved) }
+                    ?: MediaCategory(storage.id, emptySet())
+
+                val otherUsersCategory = scanForOtherUsers(storage)
+
+                updateProgressSecondary("Scanning system data")
+                val system = scanForSystem(storage, apps, media, otherUsersCategory)
+
+                log(TAG) { "Apps: ${apps?.spaceUsed}" }
+                log(TAG) { "Media: ${media.spaceUsed}" }
+                log(TAG) { "Other users: ${otherUsersCategory?.spaceUsed}" }
+                log(TAG) { "System: ${system?.spaceUsed}" }
+
+                setOfNotNull(apps, media, otherUsersCategory, system)
+            }
+        }
+    }
+
+    private data class AppScanResult(
+        val category: AppCategory?,
+        // The pkg inventory threw despite setup reporting complete. Unlike plain setup-incomplete (e.g. missing
+        // usage stats, where owner attribution is still trustworthy), this must also degrade the media scan.
+        val inventoryFailed: Boolean = false,
+    )
+
+    private suspend fun scanForApps(storage: DeviceStorage): AppScanResult {
+        log(TAG) { "scanForApps($storage)" }
+        if (!inventorySetupModule.isComplete()) {
+            log(TAG, WARN) { "Inventory setup is incomplete, can't scan apps." }
+            return AppScanResult(
+                AppCategory(
+                    storageId = storage.id,
+                    setupIncomplete = true,
+                    pkgStats = emptyMap()
+                )
+            )
+        }
+
+        if (!usageStatsSetupModule.isComplete()) {
+            log(TAG, WARN) { "Usagestats setup is incomplete, can't scan apps." }
+            return AppScanResult(
+                AppCategory(
+                    storageId = storage.id,
+                    setupIncomplete = true,
+                    pkgStats = emptyMap()
+                )
+            )
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_progress_scanning_apps)
+
+        // Same failure mode as the top-level owner forensics: setup can report complete while the pkg repo holds a
+        // stale error. Degrade to "setup incomplete" instead of aborting the whole storage scan.
+        val targetPkgs = try {
+            scanTargets(pkgRepo.current(), currentUser)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log(TAG, ERROR) { "App inventory unavailable despite completed setup, degrading app scan: ${e.asLog()}" }
+            return AppScanResult(
+                AppCategory(
+                    storageId = storage.id,
+                    setupIncomplete = true,
+                    pkgStats = emptyMap()
+                ),
+                inventoryFailed = true,
+            )
+        }
+
+        updateProgressCount(Progress.Count.Percent(targetPkgs.size))
+
+        val appScanner = appScannerFactory.create(
+            useRoot = useRoot,
+            useAdb = useAdb,
+            currentUser = currentUser,
+            dataAreas = dataAreas,
+            storage = storage,
+        )
+
+        val pkgStats = targetPkgs
+            .map { pkg ->
+                updateProgressSecondary(pkg.label ?: pkg.packageName.toCaString(), extra = pkg)
+
+                // TODO This does not include nested markers, e.g. Android/something or DCIM/something
+                // Supporting this is not trivial:
+                // If a Top level folder has app owned sub folders we need to prevent deleting it
+                // We would need to hide Android/data and Android/media, but not Android/<other>
+                // How deep would this nesting logic have to go?
+
+                val matchingTlds = topLevelDirs.filter {
+                    val owner = it.getOwner(pkg.id) ?: return@filter false
+                    !owner.hasFlag(Marker.Flag.CUSTODIAN) && !owner.hasFlag(Marker.Flag.COMMON)
+                }.toSet()
+                val request = AppStorageScanner.Request.Initial(
+                    pkg = pkg,
+                    extraData = matchingTlds.map { it.item }
+                )
+                val result = appScanner.process(request)
+                topLevelDirs.removeAll(matchingTlds)
+                increaseProgress()
+                result.pkgStat
+            }
+            .filter { it.totalSize > 0L }
+            .associateBy { it.id }
+
+        return AppScanResult(
+            if (pkgStats.isNotEmpty()) {
+                AppCategory(storageId = storage.id, pkgStats = pkgStats)
+            } else {
+                null
+            }
+        )
+    }
+
+    private suspend fun scanForMedia(
+        storage: DeviceStorage,
+        mediaDir: APathLookup<*>,
+        storageChildren: Collection<APath>,
+        ownersResolved: Boolean,
+    ): MediaCategory {
+        log(TAG) { "scanForMedia($storage)" }
+        updateProgressPrimary(mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_progress_scanning_userfiles)
+
+        if (!ownersResolved) {
+            log(TAG, WARN) { "Owner forensics unavailable, sizing media folders directly (read-only)." }
+            updateProgressCount(Progress.Count.Percent(storageChildren.size))
+
+            val topLevelContents: Collection<ContentItem> = storageChildren.mapNotNull { path ->
+                updateProgressSecondary(path.userReadablePath)
+
+                try {
+                    path.sizeContentItem(gatewaySwitch)
+                } catch (e: ReadException) {
+                    log(TAG, ERROR) { "Failed to size top-level dir $path: ${e.asLog()}" }
+                    null
+                } finally {
+                    increaseProgress()
+                }
+            }
+
+            // All sized items are direct children of the storage root, so build the tree directly instead of
+            // relying on segment-based nesting — a stray non-child path must not abort the degraded scan.
+            val rootItem = ContentItem.fromLookup(mediaDir).copy(children = topLevelContents)
+
+            val group = ContentGroup(
+                label = mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_storage_content_type_media_label.toCaString(),
+                contents = setOf(rootItem),
+            )
+
+            return MediaCategory(
+                storageId = storage.id,
+                groups = setOf(group),
+                isReadOnly = true,
+            )
+        }
+
+        updateProgressCount(Progress.Count.Percent(topLevelDirs.size))
+
+        val topLevelContents: Collection<ContentItem> = topLevelDirs.mapNotNull { ownerInfo ->
+            updateProgressSecondary(ownerInfo.areaInfo.file.userReadablePath)
+
+            try {
+                ownerInfo.areaInfo.file.walkContentItem(gatewaySwitch)
+            } catch (e: ReadException) {
+                log(TAG, ERROR) { "Failed to look up top-level dir ${ownerInfo.areaInfo.file}: ${e.asLog()}" }
+                return@mapNotNull null
+            } finally {
+                increaseProgress()
+            }
+        }
+
+        val rootItem = topLevelContents.plus(ContentItem.fromLookup(mediaDir)).toNestedContent().single()
+
+        val group = ContentGroup(
+            label = mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_storage_content_type_media_label.toCaString(),
+            contents = setOf(rootItem),
+        )
+
+        return MediaCategory(
+            storageId = storage.id,
+            groups = setOf(group),
+        )
+    }
+
+    private suspend fun scanForOtherUsers(storage: DeviceStorage): OtherUsersCategory? {
+        log(TAG) { "scanForOtherUsers($storage)" }
+        if (otherUsers.isEmpty()) return null
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_storage_content_type_otherusers_label)
+        updateProgressSecondary(Progress.Data().secondary)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        return otherUserStorageScanner.scan(
+            storage = storage,
+            users = otherUsers,
+            dataAreas = dataAreas,
+            useRoot = useRoot,
+        ) { user ->
+            updateProgressSecondary(user.getHumanLabel())
+        }
+    }
+
+    private suspend fun scanForSystem(
+        storage: DeviceStorage,
+        appCategory: AppCategory?,
+        mediaCategory: MediaCategory,
+        otherUsersCategory: OtherUsersCategory?,
+    ): SystemCategory? {
+        log(TAG) { "scanForSystem($storage)" }
+        updateProgressPrimary(mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_progress_scanning_system)
+        updateProgressSecondary(Progress.Data().secondary)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        if (storage.type != DeviceStorage.Type.PRIMARY) {
+            log(TAG) { "Not a primary storage: $storage" }
+            return null
+        }
+
+        val unaccountedFor = computeResidual(
+            spaceUsed = storage.spaceUsed,
+            apps = appCategory?.spaceUsed ?: 0L,
+            media = mediaCategory.spaceUsed,
+            otherUsers = otherUsersCategory?.spaceUsed ?: 0L,
+        )
+
+        val contentItems = setOf(
+            ContentItem.fromInaccessible(LocalPath.build("system")),
+            ContentItem.fromInaccessible(LocalPath.build("data"))
+        )
+
+        val groups = setOf(
+            ContentGroup(
+                label = mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_storage_content_type_system_label.toCaString(),
+                contents = contentItems
+            )
+        )
+
+        return SystemCategory(
+            storageId = storage.id,
+            groups = groups,
+            spaceUsedOverride = unaccountedFor,
+            isBrowsable = useRoot || useAdb,
+        )
+    }
+
+    suspend fun deepScanApp(storage: DeviceStorage, app: AppCategory.PkgStat): AppCategory.PkgStat {
+        log(TAG) { "deepScanApp(): On $storage: $app" }
+        init(storage)
+
+        updateProgressPrimary(app.label)
+        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading)
+
+        val appScanner = appScannerFactory.create(
+            useRoot = useRoot,
+            useAdb = useAdb,
+            currentUser = currentUser,
+            dataAreas = dataAreas,
+            storage = storage,
+        )
+
+
+        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_searching)
+
+        val request = AppStorageScanner.Request.Reprocessing(
+            pkgStat = app
+        )
+        // Per-item progress: deep scans of apps with huge folders otherwise sit on a static
+        // "Searching" for minutes, looking like a hang (the progress host throttles updates)
+        val rescanned = appScanner.process(request) { updateProgressSecondary(it.userReadablePath) }
+
+        log(TAG) { "Rescanned ${app.id}: $rescanned" }
+
+        return rescanned.pkgStat
+    }
+
+    suspend fun deepScanSystem(
+        storage: DeviceStorage,
+        existingGroupId: ContentGroup.Id,
+        existingSpaceUsedOverride: Long?,
+    ): SystemCategory {
+        log(TAG) { "deepScanSystem(): On $storage" }
+        init(storage)
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.analyzer.R.string.analyzer_storage_content_type_system_label)
+        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_searching)
+
+        return systemStorageScanner.scan(storage.id, existingGroupId, existingSpaceUsedOverride, dataAreas)
+    }
+
+    companion object {
+        private val TAG = logTag("Analyzer", "Storage", "Scanner")
+
+        /**
+         * Packages this scan may attribute: real installs of the current user.
+         *
+         * Other users' packages belong to [OtherUsersCategory]; listing them here would duplicate
+         * every app row and count their bytes twice.
+         */
+        fun scanTargets(pkgs: Collection<Installed>, currentUser: UserHandle2): Collection<Installed> = pkgs
+            .filter { it.packageName != "android" }
+            .filter { it.applicationInfo != null }
+            .filter { it.userHandle == currentUser }
+
+        /**
+         * Other users on this storage, from both sources combined.
+         *
+         * Neither source alone is enough: [UserManager2.allUsers] falls back to
+         * `UserManager.userProfiles` without root/ADB and misses full secondary users, while the
+         * hidden `getVolumes()` lists every user's emulated volume even without any permission but
+         * carries no names. Older devices (e.g. API 27/28) expose a single `emulated` volume with
+         * `mountUserId=-1`, so there the named list is the only source that finds anything.
+         *
+         * Negative handle ids are dropped from either source, they are sentinels
+         * (`-1` unknown, `-10000` private volume), not users.
+         */
+        fun mergeOtherUsers(
+            storageType: DeviceStorage.Type,
+            volumes: List<VolumeInfoX>?,
+            named: Collection<UserProfile2>,
+            currentUser: UserHandle2,
+        ): Set<UserProfile2> {
+            if (storageType != DeviceStorage.Type.PRIMARY) return emptySet()
+            val namedByHandle = named.associateBy { it.handle }
+            return namedByHandle.keys
+                .plus(otherUserHandles(storageType, volumes, currentUser))
+                .filter { it != currentUser }
+                .filter { it.handleId >= 0 }
+                .map { namedByHandle[it] ?: UserProfile2(handle = it) }
+                .toSet()
+        }
+
+        /**
+         * Emulated storage roots of other users, from the hidden volume list.
+         *
+         * Only emulated, primary volumes count. The private volume reports `mountUserId=-10000`, so
+         * an unfiltered scan would invent a user. Secondary/portable storage has no
+         * `/data/media/<id>` model, so the whole category doesn't apply there. Mount state is not a
+         * filter: a stopped user still occupies storage.
+         */
+        fun otherUserHandles(
+            storageType: DeviceStorage.Type,
+            volumes: List<VolumeInfoX>?,
+            currentUser: UserHandle2,
+        ): Set<UserHandle2> {
+            if (storageType != DeviceStorage.Type.PRIMARY) return emptySet()
+            return volumes
+                ?.filter { it.isEmulated }
+                ?.filter { it.isPrimary == true }
+                ?.mapNotNull { it.mountUserId }
+                ?.filter { it >= 0 }
+                ?.map { UserHandle2(handleId = it) }
+                ?.filter { it != currentUser }
+                ?.toSet()
+                ?: emptySet()
+        }
+
+        /**
+         * Storage not attributed to apps, media or other users.
+         *
+         * In the degraded scan media folders are du-sized (no owner forensics), which can overcount
+         * and push this below zero. Clamp so the system category never reports a negative size, and
+         * name the components when the inputs don't add up.
+         */
+        fun computeResidual(spaceUsed: Long, apps: Long, media: Long, otherUsers: Long): Long {
+            val accounted = apps + media + otherUsers
+            if (accounted > spaceUsed) {
+                log(TAG, WARN) {
+                    "Over-accounted storage: apps=$apps + media=$media + otherUsers=$otherUsers " +
+                        "= $accounted > spaceUsed=$spaceUsed"
+                }
+            }
+            return (spaceUsed - accounted).coerceAtLeast(0L)
+        }
+    }
+}

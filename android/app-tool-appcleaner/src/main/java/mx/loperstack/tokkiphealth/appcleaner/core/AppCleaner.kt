@@ -1,0 +1,617 @@
+package mx.loperstack.tokkiphealth.appcleaner.core
+
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
+import mx.loperstack.tokkiphealth.appcleaner.core.forensics.ExpendablesFilter
+import mx.loperstack.tokkiphealth.appcleaner.core.forensics.filter.DefaultCachesPublicFilter
+import mx.loperstack.tokkiphealth.appcleaner.core.scanner.AppScanner
+import mx.loperstack.tokkiphealth.appcleaner.core.tasks.AppCleanerOneClickTask
+import mx.loperstack.tokkiphealth.appcleaner.core.tasks.AppCleanerProcessingTask
+import mx.loperstack.tokkiphealth.appcleaner.core.tasks.AppCleanerScanTask
+import mx.loperstack.tokkiphealth.appcleaner.core.tasks.AppCleanerSchedulerTask
+import mx.loperstack.tokkiphealth.appcleaner.core.tasks.AppCleanerTask
+import mx.loperstack.tokkiphealth.appcleaner.core.tasks.AppCleanerTask.StopReason
+import mx.loperstack.tokkiphealth.automation.core.errors.AutomationNoConsentException
+import mx.loperstack.tokkiphealth.automation.core.errors.isScreenUnavailable
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.ca.CaString
+import mx.loperstack.tokkiphealth.common.coroutine.AppScope
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.APathAncestorIndex
+import mx.loperstack.tokkiphealth.common.files.GatewaySwitch
+import mx.loperstack.tokkiphealth.common.files.matches
+import mx.loperstack.tokkiphealth.common.flow.replayingShare
+import mx.loperstack.tokkiphealth.common.forensics.FileForensics
+import mx.loperstack.tokkiphealth.common.pkgs.features.InstallId
+import mx.loperstack.tokkiphealth.common.pkgs.pkgops.PkgOps
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.progress.increaseProgress
+import mx.loperstack.tokkiphealth.common.progress.updateProgressCount
+import mx.loperstack.tokkiphealth.common.progress.updateProgressPrimary
+import mx.loperstack.tokkiphealth.common.progress.updateProgressSecondary
+import mx.loperstack.tokkiphealth.common.progress.withProgress
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.sharedresource.SharedResource
+import mx.loperstack.tokkiphealth.common.sharedresource.keepResourceHoldersAlive
+import mx.loperstack.tokkiphealth.common.shell.ShellOps
+import mx.loperstack.tokkiphealth.common.upgrade.UpgradeRepo
+import mx.loperstack.tokkiphealth.common.upgrade.UpgradeRequiredException
+import mx.loperstack.tokkiphealth.common.upgrade.isProSettled
+import mx.loperstack.tokkiphealth.exclusion.core.ExclusionManager
+import mx.loperstack.tokkiphealth.exclusion.core.types.Exclusion
+import mx.loperstack.tokkiphealth.exclusion.core.types.ExclusionId
+import mx.loperstack.tokkiphealth.exclusion.core.types.PathExclusion
+import mx.loperstack.tokkiphealth.exclusion.core.types.PathExclusionIndex
+import mx.loperstack.tokkiphealth.exclusion.core.types.PkgExclusion
+import mx.loperstack.tokkiphealth.main.core.PartialResultException
+import mx.loperstack.tokkiphealth.main.core.SDMTool
+import mx.loperstack.tokkiphealth.setup.IncompleteSetupException
+import mx.loperstack.tokkiphealth.setup.SetupModule
+import mx.loperstack.tokkiphealth.setup.isComplete
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import javax.inject.Inject
+import mx.loperstack.tokkiphealth.setup.SetupBinding
+import javax.inject.Provider
+import javax.inject.Singleton
+
+private val AppCleanerTask.requiresPro: Boolean
+    get() = when (this) {
+        is AppCleanerScanTask -> false
+        is AppCleanerProcessingTask -> true
+        is AppCleanerSchedulerTask -> true
+        is AppCleanerOneClickTask -> true
+    }
+
+private fun AppCleanerProcessingTask.Success.toSchedulerSuccess() = AppCleanerSchedulerTask.Success(
+    affectedSpace = affectedSpace,
+    affectedPaths = affectedPaths,
+    affectedCount = affectedCount,
+    stoppedEarly = stoppedEarly,
+    skippedCount = skippedCount,
+)
+
+private fun AppCleanerProcessingTask.Success.toOneClickSuccess() = AppCleanerOneClickTask.Success(
+    affectedSpace = affectedSpace,
+    affectedPaths = affectedPaths,
+    affectedCount = affectedCount,
+    stoppedEarly = stoppedEarly,
+    skippedCount = skippedCount,
+)
+
+@Singleton
+class AppCleaner @Inject constructor(
+    @AppScope private val appScope: CoroutineScope,
+    private val fileForensics: FileForensics,
+    private val appScannerProvider: Provider<AppScanner>,
+    private val inaccessibleDeleterProvider: Provider<InaccessibleDeleter>,
+    private val exclusionManager: ExclusionManager,
+    private val gatewaySwitch: GatewaySwitch,
+    private val pkgOps: PkgOps,
+    @SetupBinding(SetupModule.Type.USAGE_STATS) usageStatsSetupModule: SetupModule,
+    rootManager: RootManager,
+    private val adbManager: AdbManager,
+    private val shellOps: ShellOps,
+    private val filterFactories: Set<@JvmSuppressWildcards ExpendablesFilter.Factory>,
+    @SetupBinding(SetupModule.Type.INVENTORY) private val appInventorySetupModule: SetupModule,
+    private val upgradeRepo: UpgradeRepo,
+) : SDMTool, Progress.Client {
+
+    override val sharedResource = SharedResource.createKeepAlive(TAG, appScope)
+
+    private val progressPub = MutableStateFlow<Progress.Data?>(null)
+    override val progress: Flow<Progress.Data?> = progressPub
+    override fun updateProgress(update: (Progress.Data?) -> Progress.Data?) {
+        progressPub.value = update(progressPub.value)
+    }
+
+    private val internalData = MutableStateFlow(null as Data?)
+
+    override val type: SDMTool.Type = SDMTool.Type.APPCLEANER
+
+    override val state: Flow<State> = combine(
+        usageStatsSetupModule.state,
+        rootManager.useRoot,
+        adbManager.useAdb,
+        internalData,
+        progress,
+    ) { usageState, useRoot, useAdb, data, progress ->
+        State(
+            data = data,
+            progress = progress,
+            isRunningAppsDetectionAvailable = usageState.isComplete || useRoot || useAdb,
+            isOtherUsersAvailable = useRoot,
+            isInaccessibleCacheAvailable = usageState.isComplete || useRoot || useAdb,
+            isAcsRequired = !useRoot
+        )
+    }.replayingShare(appScope)
+
+    private val toolLock = Mutex()
+
+    /** Drops the current scan results (and only those — progress, settings and task history are unaffected). */
+    suspend fun discardScanData() = toolLock.withLock {
+        log(TAG) { "discardScanData()" }
+        internalData.value = null
+    }
+
+    override suspend fun submit(task: SDMTool.Task): SDMTool.Task.Result {
+        task as AppCleanerTask
+
+        // Pro gate at the API boundary: defense-in-depth so a UI mistake can't run a Pro-only task
+        // for free. Checked before acquiring toolLock so the (possibly waiting) Pro check never
+        // holds the lock and blocks other submits.
+        if (task.requiresPro && !upgradeRepo.isProSettled()) {
+            log(TAG, WARN) { "submit() denied, Pro upgrade required: $task" }
+            throw UpgradeRequiredException(type)
+        }
+
+        return performTask(task)
+    }
+
+    private suspend fun performTask(task: AppCleanerTask): SDMTool.Task.Result = toolLock.withLock {
+        log(TAG) { "submit(): Starting...$task" }
+        updateProgress { Progress.Data() }
+        try {
+            val result = keepResourceHoldersAlive(fileForensics, gatewaySwitch, pkgOps, shellOps) {
+                when (task) {
+                    is AppCleanerScanTask -> performScan(task)
+                    is AppCleanerProcessingTask -> performProcessing(task)
+                    is AppCleanerSchedulerTask -> {
+                        performScan()
+                        // A partial result carries the processing task's own Success type; rewrap it
+                        // so what TaskManager records always matches the submitted task.
+                        try {
+                            performProcessing(
+                                AppCleanerProcessingTask(
+                                    useAutomation = task.useAutomation,
+                                    isBackground = true,
+                                )
+                            ).toSchedulerSuccess()
+                        } catch (e: PartialResultException) {
+                            throw PartialResultException(
+                                e.cause,
+                                (e.partialResult as AppCleanerProcessingTask.Success).toSchedulerSuccess(),
+                            )
+                        }
+                    }
+
+                    is AppCleanerOneClickTask -> {
+                        performScan()
+                        try {
+                            performProcessing(
+                                AppCleanerProcessingTask(
+                                    isBackground = task.shortcutMode,
+                                )
+                            ).toOneClickSuccess()
+                        } catch (e: PartialResultException) {
+                            throw PartialResultException(
+                                e.cause,
+                                (e.partialResult as AppCleanerProcessingTask.Success).toOneClickSuccess(),
+                            )
+                        }
+                    }
+                }
+            }
+            log(TAG, INFO) { "submit() finished: $result" }
+            result
+        } finally {
+            updateProgress { null }
+        }
+    }
+
+    private suspend fun performScan(
+        task: AppCleanerScanTask = AppCleanerScanTask()
+    ): AppCleanerScanTask.Result {
+        log(TAG, VERBOSE) { "performScan(): $task" }
+
+        if (!appInventorySetupModule.isComplete()) {
+            log(TAG, WARN) { "SetupModule INVENTORY is not complete" }
+            throw IncompleteSetupException(SetupModule.Type.INVENTORY)
+        }
+
+        internalData.value = null
+
+        val scanner = appScannerProvider.get()
+
+        scanner.initialize()
+
+        val results = scanner.withProgress(this) {
+            scan(pkgFilter = task.pkgIdFilter)
+        }
+
+        log(TAG) { "Warming up fields..." }
+        results.forEach { it.size }
+        log(TAG) { "Field warm up done." }
+
+        val data = Data(
+            junks = results,
+        )
+        internalData.value = data
+
+        return data.toScanSuccess()
+    }
+
+    private suspend fun performProcessing(
+        task: AppCleanerProcessingTask = AppCleanerProcessingTask()
+    ): AppCleanerProcessingTask.Success {
+        log(TAG, VERBOSE) { "performProcessing(): $task" }
+
+        val snapshot = internalData.value ?: throw IllegalStateException("Data is null")
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_preparing)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        val filters = filterFactories
+            .map { it.create() }
+            .onEach { it.initialize() }
+
+        val accessibleDeletionMap = if (!task.onlyInaccessible) {
+            val deletionMap = mutableMapOf<InstallId, Set<ExpendablesFilter.Match>>()
+
+            val targetJunk = task.targetPkgs
+                ?.map { tp -> snapshot.junks.single { it.identifier == tp } }
+                ?: snapshot.junks
+                    // Exclusion-limited junks are in the snapshot because the ADB cache trim would
+                    // reach them anyway. Deleting their files directly is never ours to do.
+                    .filter { !it.isExclusionLimited }
+
+            updateProgressCount(Progress.Count.Percent(targetJunk.size))
+
+            targetJunk
+                .sortedByDescending { it.size }
+                .forEach { appJunk ->
+                    updateProgressPrimary(appJunk.label)
+
+                    val targetFilters = task.targetFilters
+                        ?: appJunk.expendables?.keys
+                        ?: emptySet()
+
+                    val allMatches = appJunk.expendables?.values?.flatten() ?: emptySet()
+
+                    val targetMatches: Collection<ExpendablesFilter.Match> = task.targetContents
+                        ?.map { tc ->
+                            allMatches.single { tc.matches(it.path) }
+                        }
+                        ?: appJunk.expendables?.filterKeys { targetFilters.contains(it) }?.values?.flatten()
+                        ?: emptySet()
+
+                    val deleted = mutableSetOf<ExpendablesFilter.Match>()
+
+                    targetMatches.groupBy { it.identifier }.forEach { (filterIdentifier, targets) ->
+                        val filter = filters.singleOrNull { it.identifier == filterIdentifier }
+                            ?: throw IllegalStateException("Can't find filter for $filterIdentifier")
+
+                        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading)
+                        val currentProgress = progress.first()
+                        filter.withProgress(
+                            client = this,
+                            onUpdate = { old, new ->
+                                old?.copy(
+                                    secondary = new?.primary ?: CaString.EMPTY,
+                                    count = new?.count ?: Progress.Count.Indeterminate(),
+                                )
+                            },
+                            onCompletion = { currentProgress }
+                        ) {
+                            val result = process(targets, allMatches)
+                            log(TAG, INFO) {
+                                "Processed ${result.success.size} targets in $filterIdentifier for ${appJunk.pkg}!"
+                            }
+                            if (result.failed.isNotEmpty()) {
+                                log(TAG, WARN) {
+                                    "${result.failed.size} targets failed to process in $filterIdentifier for ${appJunk.pkg}"
+                                }
+                            }
+                            deleted.addAll(result.success)
+                        }
+                    }
+
+                    deletionMap[appJunk.identifier] = deleted
+                    increaseProgress()
+                }
+
+            deletionMap
+        } else {
+            emptyMap()
+        }
+
+
+        // The accessible deletions above already hit the disk, but `internalData` is only rewritten
+        // below. If the ACS stage throws (automation unavailable, screen locked, compatibility
+        // give-up, ...) an early return would strand that rewrite, and the card would keep listing
+        // files that are gone and advertise space that is already free. So capture the failure,
+        // let the bookkeeping run with a null `acsResult` (which folds in the accessible deletions
+        // and leaves the inaccessible caches untouched), and only then propagate.
+        var acsResult: InaccessibleDeleter.InaccDelResult? = null
+        var acsFailure: Exception? = null
+        if (task.includeInaccessible) {
+            try {
+                acsResult = inaccessibleDeleterProvider.get().withProgress(
+                    this,
+                    onCompletion = { it }
+                ) {
+                    deleteInaccessible(
+                        snapshot = snapshot,
+                        targetPkgs = task.targetPkgs,
+                        useAutomation = task.useAutomation,
+                        isBackground = task.isBackground,
+                        // Caches it managed to clear before failing are gone for real; take them so
+                        // the reconciliation below drops them instead of re-advertising them.
+                        onPartialResult = { acsResult = it },
+                    )
+                }
+            } catch (e: Exception) {
+                // Deliberately includes CancellationException: a cancel landing mid-ACS strands the
+                // accessible deletions exactly like any other failure does, and the reconciliation
+                // below contains no suspension points, so it is safe to run on a cancelled
+                // coroutine. The original exception is rethrown unchanged afterwards, so a cancel
+                // is still recorded as a cancel.
+                log(TAG, WARN) { "Inaccessible deletion failed, salvaging accessible results: ${e.asLog()}" }
+                acsFailure = e
+            }
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_filtering)
+        updateProgressSecondary(CaString.EMPTY)
+
+        val deleted = mutableSetOf<APath>()
+
+        val reconciledJunks = snapshot.junks.map { appJunk ->
+            updateProgressSecondary(appJunk.label, extra = appJunk.pkg)
+            // Remove all files we deleted or children of deleted files
+
+            val deletedInaccessible = mutableSetOf<ExpendablesFilter.Match>()
+
+            val deletedIndex = APathAncestorIndex<ExpendablesFilter.Match> { it.path }
+            accessibleDeletionMap.getOrDefault(appJunk.identifier, emptySet()).forEach { deletedIndex.add(it) }
+
+            val updatedExpendables = appJunk.expendables?.mapValues { (type, matches) ->
+                if (type == DefaultCachesPublicFilter::class && acsResult?.succesful?.contains(appJunk.identifier) == true) {
+                    // It's inaccessible caches were deleted, this included the default public caches
+                    return@mapValues emptySet<ExpendablesFilter.Match>()
+                }
+
+                matches.filter { match ->
+                    val isDeleted = deletedIndex.hasAncestorOrMatchOf(match.path)
+                    if (isDeleted) {
+                        deleted.add(match.path)
+                        if (match.identifier == DefaultCachesPublicFilter::class) {
+                            // We need path and size to update the size of `InaccessibleCache` later
+                            deletedInaccessible.add(match)
+                        }
+                    }
+                    !isDeleted
+                }
+            }?.filterValues { it.isNotEmpty() }
+
+            val updatedInaccessible = appJunk.inaccessibleCache?.let { inacc ->
+                if (acsResult?.succesful?.contains(appJunk.identifier) == true) {
+                    // Inaccessible were deleted, `expendables` should have been updated correctly by above code
+                    deleted.addAll(inacc.theoreticalPaths)
+                    return@let null
+                }
+
+                val deletedSize = deletedInaccessible.sumOf { it.expectedGain }
+                inacc.copy(
+                    totalSize = inacc.totalSize - deletedSize,
+                    publicSize = inacc.publicSize?.let { it - deletedSize }?.coerceAtLeast(0L),
+                )
+            }
+
+
+            appJunk.copy(
+                expendables = updatedExpendables,
+                inaccessibleCache = updatedInaccessible,
+                acsError = when {
+                    acsResult == null -> appJunk.acsError
+                    acsResult.failed.containsKey(appJunk.identifier) -> acsResult.failed[appJunk.identifier]
+                    acsResult.succesful.contains(appJunk.identifier) -> null
+                    // Not attempted this run (e.g. a targeted delete of other apps): a fresh
+                    // null must not erase what the last actual attempt learned.
+                    else -> appJunk.acsError
+                },
+            )
+        }.filter { !it.isEmpty() }
+        internalData.value = snapshot.copy(junks = reconciledJunks.pruneOrphanedExclusionLimited())
+
+        // `acsResult` is a var (the partial-result callback writes to it), so it won't smart-cast.
+        val acsOutcome = acsResult
+        // Prefer what the deleter actually observed disappearing. The pre-clear size is only a
+        // claim: an app can report a successful cache clear and still hold every byte, which used
+        // to be reported as freed space the user never got back. Apps the deleter could not
+        // measure fall back to the pre-clear size, i.e. the previous behaviour.
+        // Force check via !! because we should not have ran automation for any junk without inaccessible data
+        val automationSize = acsOutcome?.succesful
+            ?.sumOf { inaccessible ->
+                acsOutcome.freedBytes[inaccessible]
+                    ?: snapshot.junks.single { it.identifier == inaccessible }.inaccessibleCache!!.totalSize
+            }
+            ?: 0L
+        // Count items the same way the scan reported them ("X expendable items found"): the difference between
+        // the pre- and post-deletion scan totals. Deriving it from the snapshot avoids re-deriving the
+        // accessible/inaccessible/public-cache counting rules in a second hand-rolled counter, and it counts ACS
+        // cache clears at scan scale rather than as the <=2 synthetic paths that land in `affectedPaths`.
+        val affectedCount = (snapshot.totalCount - reconciledJunks.sumOf { it.itemCount }).coerceAtLeast(0)
+        val salvaged = AppCleanerProcessingTask.Success(
+            affectedSpace = accessibleDeletionMap.values.sumOf { contents -> contents.sumOf { it.expectedGain } } + automationSize,
+            affectedPaths = deleted,
+            affectedCount = affectedCount,
+        )
+
+        // `internalData` now reflects the accessible deletions plus whatever the ACS stage reported
+        // before failing, so the failure can surface. It travels wrapped, carrying what was already
+        // deleted: TaskManager records both, so the run shows up as a partial success instead of
+        // discarding everything, while submit() callers still see the original exception.
+        acsFailure?.let { failure ->
+            if (failure is CancellationException) throw failure
+            if (salvaged.affectedCount == 0 && salvaged.affectedSpace == 0L) throw failure
+            val reason = if (failure.isScreenUnavailable()) StopReason.SCREEN_UNAVAILABLE else StopReason.ERROR
+            throw PartialResultException(failure, salvaged.copy(stoppedEarly = reason))
+        }
+
+        if (acsOutcome != null && acsOutcome.skippedNoConsent.isNotEmpty()) {
+            log(TAG, WARN) { "Skipped for lack of ACS consent: ${acsOutcome.skippedNoConsent}" }
+            // Nothing was salvaged, so there is no outcome to report and no other place that offers
+            // the user a way to grant consent. Fail with the dialog that routes to setup.
+            if (salvaged.affectedCount == 0 && salvaged.affectedSpace == 0L) {
+                throw InaccessibleDeletionException(AutomationNoConsentException())
+            }
+            return salvaged.copy(
+                stoppedEarly = StopReason.AUTOMATION_NO_CONSENT,
+                skippedCount = acsOutcome.skippedNoConsent.size,
+            )
+        }
+
+        return salvaged
+    }
+
+    suspend fun exclude(identifiers: Set<InstallId>): ExclusionUndo = toolLock.withLock {
+        log(TAG) { "exclude(): $identifiers" }
+
+        // FIXME what about user specific exclusion?
+        val exclusions = identifiers.map {
+            PkgExclusion(
+                pkgId = it.pkgId,
+                tags = setOf(Exclusion.Tag.APPCLEANER),
+            )
+        }.toSet()
+
+        // Everything that can suspend or fail is resolved before save(), otherwise a cancel between
+        // a durable exclusion and the state rewrite would leave stale data and no undo handle.
+        val snapshot = internalData.value!!
+        val canUseAdb = adbManager.canUseAdbNow()
+
+        val saved = exclusionManager.save(exclusions)
+
+        val updated = snapshot.copy(
+            junks = snapshot.junks.mapNotNull { junk ->
+                if (exclusions.none { it.match(junk.identifier.pkgId) }) return@mapNotNull junk
+                if (canUseAdb) junk.limitToTrimBlastRadius() else null
+            }.pruneOrphanedExclusionLimited()
+        )
+        internalData.value = updated
+
+        ExclusionUndo(
+            exclusionIds = saved.map { it.id }.toSet(),
+            previousData = snapshot,
+            postExcludeData = updated,
+        )
+    }
+
+    suspend fun undoExclude(handle: ExclusionUndo) = toolLock.withLock {
+        log(TAG, INFO) { "undoExclude(${handle.exclusionIds})" }
+        if (handle.exclusionIds.isNotEmpty()) {
+            exclusionManager.remove(handle.exclusionIds)
+        }
+        if (internalData.value === handle.postExcludeData) {
+            internalData.value = handle.previousData
+        } else {
+            log(TAG, WARN) { "undoExclude: state moved on, only removed exclusions" }
+        }
+    }
+
+    data class ExclusionUndo(
+        val exclusionIds: Set<ExclusionId>,
+        internal val previousData: Data,
+        internal val postExcludeData: Data,
+    )
+
+    suspend fun exclude(identifier: InstallId, exclsionTargets: Set<APath>) = toolLock.withLock {
+        log(TAG) { "exclude(): $identifier, $exclsionTargets" }
+        val exclusions = exclsionTargets.map {
+            PathExclusion(
+                path = it,
+                tags = setOf(Exclusion.Tag.APPCLEANER),
+            )
+        }.toSet()
+        exclusionManager.save(exclusions)
+
+        // A bulk exclude can carry tens of thousands of targets. Matching every junk item against
+        // every exclusion would be quadratic (and suspend), so index the exclusions once.
+        val index = PathExclusionIndex(exclusions)
+        var excludedCount = 0
+        var totalCount = 0
+
+        val snapshot = internalData.value!!
+        internalData.value = snapshot.copy(
+            junks = snapshot.junks.map { junk ->
+                if (junk.identifier == identifier) {
+                    junk.copy(
+                        expendables = junk.expendables?.entries
+                            ?.map { entry ->
+                                entry.key to entry.value.filter { match ->
+                                    totalCount++
+                                    val hit = index.matches(match.path)
+                                    if (hit) excludedCount++
+                                    !hit
+                                }
+                            }
+                            ?.filter { it.second.isNotEmpty() }
+                            ?.toMap()
+                    )
+                } else {
+                    junk
+                }
+            }.pruneOrphanedExclusionLimited()
+        )
+
+        log(TAG) { "exclude(): Excluded $excludedCount of $totalCount matches for $identifier" }
+    }
+
+    data class State(
+        val data: Data?,
+        val progress: Progress.Data?,
+        val isOtherUsersAvailable: Boolean,
+        val isRunningAppsDetectionAvailable: Boolean,
+        val isInaccessibleCacheAvailable: Boolean,
+        val isAcsRequired: Boolean,
+    ) : SDMTool.State
+
+    data class Data(
+        val junks: Collection<AppJunk>
+    ) {
+        val totalSize: Long get() = junks.sumOf { it.size }
+        val totalCount: Int get() = junks.sumOf { it.itemCount }
+
+        /**
+         * Like [totalSize]/[totalCount], but without junks that are [AppJunk.isUnclearable] —
+         * what a delete action can actually free. Unclearable junks stay visible in the tool
+         * itself (with the failure reason), they just must not be advertised as freeable.
+         */
+        val actionableSize: Long get() = junks.filterNot { it.isUnclearable }.sumOf { it.size }
+        val actionableCount: Int get() = junks.filterNot { it.isUnclearable }.sumOf { it.itemCount }
+
+        /** Live scan summary. Single source of truth shared with [performScan] and the dashboard card. */
+        fun toScanSuccess() = AppCleanerScanTask.Success(
+            itemCount = totalCount,
+            recoverableSpace = totalSize,
+        )
+    }
+
+    @InstallIn(SingletonComponent::class)
+    @Module
+    abstract class DIM {
+        @Binds @IntoSet abstract fun mod(mod: AppCleaner): SDMTool
+    }
+
+    companion object {
+        private val TAG = logTag("AppCleaner")
+    }
+}

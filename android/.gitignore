@@ -1,0 +1,54 @@
+.idea
+/.idea/**/*
+!/.idea/codeStyles/
+!/.idea/codeStyles/**/*
+*.iml
+.gradle
+build/
+/local.properties
+.local/*
+*.jks
+/fastlane/report.xml
+/fastlane/Appfile
+/captures
+.externalNativeBuild
+.cxx
+.DS_Store
+.kotlin/sessions
+.kotlin/errors
+
+/fastlane/README.md
+
+# Compose screenshot-test reference images: regenerated on demand and copied into fastlane metadata
+# by fastlane/copy_screenshots.sh, so they are intermediates, not committed artifacts.
+**/src/screenshotTest*/reference/
+
+# Play Store screenshots: only en-US is tracked. It is the listing every language without its
+# own screenshots falls back to, and PNGs are stored whole in every commit, so tracking the full
+# set costs tens of MB of permanent history per render. All other locales are generated on demand
+# (fastlane/generate_screenshots.sh) and uploaded straight from the working tree.
+fastlane/metadata/android/*/images/phoneScreenshots/*.png
+!fastlane/metadata/android/en-US/images/phoneScreenshots/*.png
+
+.codex
+_site/
+.jekyll-cache/
+vendor/bundle/
+
+# Python bytecode caches, written whenever the tools/ci unit tests run.
+__pycache__/
+*.pyc
+
+# JVM crash logs (e.g. from a layoutlib render OOM)
+hs_err_pid*.log
+replay_pid*.log
+/.pi/*
+!/.pi/settings.json
+
+# Docs site: pages copied in from the repo root before a build, and local Jekyll state
+/docs/CHANGELOG.md
+/docs/PRIVACY_POLICY.md
+/docs/SECURITY.md
+/docs/.bundle/
+/docs/vendor/
+/docs/_data/translation_status.json

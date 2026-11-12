@@ -1,0 +1,288 @@
+package mx.loperstack.tokkiphealth.squeezer.ui.settings
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.twotone.ArrowBack
+import androidx.compose.material.icons.automirrored.twotone.HelpOutline
+import androidx.compose.material.icons.automirrored.twotone.InsertDriveFile
+import androidx.compose.material.icons.automirrored.twotone.RotateRight
+import androidx.compose.material.icons.twotone.AutoAwesome
+import androidx.compose.material.icons.twotone.Compress
+import androidx.compose.material.icons.twotone.History
+import androidx.compose.material.icons.twotone.MotionPhotosOn
+import androidx.compose.material.icons.twotone.Movie
+import androidx.compose.material.icons.twotone.NewReleases
+import androidx.compose.material.icons.twotone.PhotoSizeSelectLarge
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmScaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.text.format.Formatter
+import mx.loperstack.tokkiphealth.common.ByteFormatter
+import mx.loperstack.tokkiphealth.common.compose.dialog.SdmConfirmDialog
+import mx.loperstack.tokkiphealth.common.compose.dialog.SdmDialogAction
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmTooltipIconButton
+import mx.loperstack.tokkiphealth.common.compose.preview.Preview2
+import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
+import mx.loperstack.tokkiphealth.common.compose.settings.SettingsCategoryHeader
+import mx.loperstack.tokkiphealth.common.compose.settings.SettingsPreferenceItem
+import mx.loperstack.tokkiphealth.common.compose.settings.SettingsSwitchItem
+import mx.loperstack.tokkiphealth.common.compose.settings.dialogs.SizeInputDialog
+import mx.loperstack.tokkiphealth.common.error.ErrorEventHandler
+import mx.loperstack.tokkiphealth.common.navigation.NavigationEventHandler
+import mx.loperstack.tokkiphealth.squeezer.R
+import mx.loperstack.tokkiphealth.squeezer.core.SqueezerSettings
+import mx.loperstack.tokkiphealth.common.R as CommonR
+
+@Composable
+fun SqueezerSettingsScreenHost(
+    vm: SqueezerSettingsViewModel = hiltViewModel(),
+) {
+    ErrorEventHandler(vm)
+    NavigationEventHandler(vm)
+    val state by vm.state.collectAsStateWithLifecycle()
+
+    SqueezerSettingsScreen(
+        state = state,
+        onNavigateUp = vm::navUp,
+        onIncludeJpegChanged = vm::setIncludeJpeg,
+        onIncludeWebpChanged = vm::setIncludeWebp,
+        onIncludeHeicChanged = vm::setIncludeHeic,
+        onIncludeLossyAuxImagesChanged = vm::setIncludeLossyAuxImages,
+        onIncludeMotionPhotosChanged = vm::setIncludeMotionPhotos,
+        onIncludeOversizedImagesChanged = vm::setIncludeOversizedImages,
+        onIncludeVideoChanged = vm::setIncludeVideo,
+        onSkipPreviouslyCompressedChanged = vm::setSkipPreviouslyCompressed,
+        onWriteExifMarkerChanged = vm::setWriteExifMarker,
+        onMinSizeChanged = vm::setMinSizeBytes,
+        onClearHistoryConfirmed = vm::clearHistory,
+        onHelp = vm::onHelpClick,
+    )
+}
+
+@Composable
+internal fun SqueezerSettingsScreen(
+    state: SqueezerSettingsViewModel.State = SqueezerSettingsViewModel.State(),
+    onNavigateUp: () -> Unit = {},
+    onIncludeJpegChanged: (Boolean) -> Unit = {},
+    onIncludeWebpChanged: (Boolean) -> Unit = {},
+    onIncludeHeicChanged: (Boolean) -> Unit = {},
+    onIncludeLossyAuxImagesChanged: (Boolean) -> Unit = {},
+    onIncludeMotionPhotosChanged: (Boolean) -> Unit = {},
+    onIncludeOversizedImagesChanged: (Boolean) -> Unit = {},
+    onIncludeVideoChanged: (Boolean) -> Unit = {},
+    onSkipPreviouslyCompressedChanged: (Boolean) -> Unit = {},
+    onWriteExifMarkerChanged: (Boolean) -> Unit = {},
+    onMinSizeChanged: (Long) -> Unit = {},
+    onClearHistoryConfirmed: () -> Unit = {},
+    onHelp: () -> Unit = {},
+) {
+    var showClearDialog by remember { mutableStateOf(false) }
+    var showMinSizeDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val historySummary = if (state.historyCount > 0) {
+        val (formatted, _) = ByteFormatter.formatSize(context, state.historyDatabaseSize)
+        pluralStringResource(R.plurals.squeezer_history_summary, state.historyCount, state.historyCount, formatted)
+    } else {
+        stringResource(R.string.squeezer_history_empty)
+    }
+
+    if (showClearDialog) {
+        SdmConfirmDialog(
+            title = stringResource(R.string.squeezer_history_clear_title),
+            message = stringResource(R.string.squeezer_history_clear_message),
+            onDismissRequest = { showClearDialog = false },
+            positive = SdmDialogAction(
+                label = stringResource(CommonR.string.general_reset_action),
+                onClick = {
+                    onClearHistoryConfirmed()
+                    showClearDialog = false
+                },
+            ),
+            negative = SdmDialogAction(
+                label = stringResource(CommonR.string.general_cancel_action),
+                onClick = { showClearDialog = false },
+            ),
+        )
+    }
+
+    if (showMinSizeDialog) {
+        SizeInputDialog(
+            titleRes = R.string.squeezer_min_size_title,
+            currentSize = state.minSizeBytes,
+            maximumSize = 20 * 1000 * 1000L,
+            onSave = {
+                onMinSizeChanged(it)
+                showMinSizeDialog = false
+            },
+            onReset = {
+                onMinSizeChanged(SqueezerSettings.MIN_FILE_SIZE)
+                showMinSizeDialog = false
+            },
+            onDismiss = { showMinSizeDialog = false },
+        )
+    }
+
+    SdmScaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(CommonR.string.squeezer_tool_name)) },
+                navigationIcon = {
+                    SdmTooltipIconButton(
+                        icon = Icons.AutoMirrored.TwoTone.ArrowBack,
+                        label = stringResource(CommonR.string.general_navigate_up_action),
+                        onClick = onNavigateUp,
+                    )
+                },
+                actions = {
+                    SdmTooltipIconButton(
+                        icon = Icons.AutoMirrored.TwoTone.HelpOutline,
+                        label = stringResource(CommonR.string.general_help_action),
+                        onClick = onHelp,
+                    )
+                },
+            )
+        },
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = paddingValues,
+        ) {
+            item { SettingsCategoryHeader(text = stringResource(R.string.squeezer_types_category_label)) }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.Compress,
+                    title = stringResource(R.string.squeezer_type_jpeg_title),
+                    subtitle = stringResource(R.string.squeezer_type_jpeg_description),
+                    checked = state.includeJpeg,
+                    onCheckedChange = onIncludeJpegChanged,
+                )
+            }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.Compress,
+                    title = stringResource(R.string.squeezer_type_webp_title),
+                    subtitle = stringResource(R.string.squeezer_type_webp_description),
+                    checked = state.includeWebp,
+                    onCheckedChange = onIncludeWebpChanged,
+                )
+            }
+            if (state.isHeicSupported) {
+                item {
+                    SettingsSwitchItem(
+                        icon = Icons.TwoTone.Compress,
+                        title = stringResource(R.string.squeezer_type_heic_title),
+                        subtitle = stringResource(R.string.squeezer_type_heic_description),
+                        checked = state.includeHeic,
+                        onCheckedChange = onIncludeHeicChanged,
+                    )
+                }
+            }
+            item { SettingsCategoryHeader(text = stringResource(R.string.squeezer_protected_category_label)) }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.AutoAwesome,
+                    title = stringResource(R.string.squeezer_include_lossy_aux_title),
+                    subtitle = stringResource(R.string.squeezer_include_lossy_aux_description),
+                    checked = state.includeLossyAuxImages,
+                    onCheckedChange = onIncludeLossyAuxImagesChanged,
+                )
+            }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.MotionPhotosOn,
+                    title = stringResource(R.string.squeezer_include_motion_photos_title),
+                    subtitle = stringResource(R.string.squeezer_include_motion_photos_description),
+                    checked = state.includeMotionPhotos,
+                    onCheckedChange = onIncludeMotionPhotosChanged,
+                )
+            }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.PhotoSizeSelectLarge,
+                    title = stringResource(R.string.squeezer_include_oversized_title),
+                    subtitle = stringResource(R.string.squeezer_include_oversized_description),
+                    checked = state.includeOversizedImages,
+                    onCheckedChange = onIncludeOversizedImagesChanged,
+                )
+            }
+            item { SettingsCategoryHeader(text = stringResource(R.string.squeezer_video_settings_category_label)) }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.Movie,
+                    title = stringResource(R.string.squeezer_type_video_title),
+                    subtitle = stringResource(R.string.squeezer_type_video_description),
+                    checked = state.includeVideo,
+                    onCheckedChange = onIncludeVideoChanged,
+                )
+            }
+            item { SettingsCategoryHeader(text = stringResource(R.string.squeezer_compression_settings_label)) }
+            item {
+                SettingsPreferenceItem(
+                    icon = Icons.AutoMirrored.TwoTone.InsertDriveFile,
+                    title = stringResource(R.string.squeezer_min_size_title),
+                    subtitle = stringResource(R.string.squeezer_min_size_description) +
+                        "\n" + Formatter.formatShortFileSize(context, state.minSizeBytes),
+                    onClick = { showMinSizeDialog = true },
+                )
+            }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.AutoMirrored.TwoTone.RotateRight,
+                    title = stringResource(R.string.squeezer_skip_compressed_title),
+                    subtitle = stringResource(R.string.squeezer_skip_compressed_description),
+                    checked = state.skipPreviouslyCompressed,
+                    onCheckedChange = onSkipPreviouslyCompressedChanged,
+                )
+            }
+            item {
+                SettingsSwitchItem(
+                    icon = Icons.TwoTone.NewReleases,
+                    title = stringResource(R.string.squeezer_exif_marker_title),
+                    subtitle = stringResource(R.string.squeezer_exif_marker_description),
+                    checked = state.writeExifMarker,
+                    onCheckedChange = onWriteExifMarkerChanged,
+                )
+            }
+            item {
+                SettingsPreferenceItem(
+                    icon = Icons.TwoTone.History,
+                    title = stringResource(R.string.squeezer_history_title),
+                    subtitle = historySummary,
+                    onClick = { showClearDialog = true },
+                )
+            }
+        }
+    }
+}
+
+@Preview2
+@Composable
+private fun SqueezerSettingsScreenPreview() {
+    PreviewWrapper {
+        SqueezerSettingsScreen(
+            state = SqueezerSettingsViewModel.State(
+                includeJpeg = true,
+                includeWebp = true,
+                includeVideo = false,
+                skipPreviouslyCompressed = true,
+                writeExifMarker = false,
+                minSizeBytes = 512 * 1024L,
+                historyCount = 42,
+                historyDatabaseSize = 32 * 1024L,
+            ),
+        )
+    }
+}

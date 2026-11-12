@@ -1,0 +1,59 @@
+package mx.loperstack.tokkiphealth.common.storage
+
+import android.app.usage.StorageStats
+import android.app.usage.StorageStatsManager
+import dagger.Reusable
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.funnel.IPCFunnel
+import mx.loperstack.tokkiphealth.common.pkgs.features.Installed
+import mx.loperstack.tokkiphealth.common.user.UserHandle2
+import javax.inject.Inject
+
+@Reusable
+class StorageStatsManager2 @Inject constructor(
+    private val osStatManager: StorageStatsManager,
+    // We don't need the direct IPCFunnel reference, but to lighten the load in the IPC buffer we use it's locking
+    private val ipcFunnel: IPCFunnel,
+) {
+
+    suspend fun queryStatsForAppUid(storageId: StorageId, pkg: Installed): StorageStats = ipcFunnel.use {
+        val appUid = pkg.applicationInfo?.uid ?: throw IllegalStateException("${pkg.id} is missing an UID")
+        osStatManager.queryStatsForUid(storageId.externalId, appUid)
+    }
+
+    suspend fun queryStatsForPkg(storageId: StorageId, pkg: Installed): StorageStats = ipcFunnel.use {
+        osStatManager.queryStatsForPackage(storageId.externalId, pkg.packageName, pkg.userHandle.asUserHandle())
+    }
+
+    /**
+     * Storage stats for a whole user/profile.
+     *
+     * Beyond usage-stats access this needs [mx.loperstack.tokkiphealth.common.permissions.Permission.INTERACT_ACROSS_USERS]
+     * for any user other than the current one.
+     */
+    suspend fun queryStatsForUser(storageId: StorageId, userHandle: UserHandle2): StorageStats = ipcFunnel.use {
+        osStatManager.queryStatsForUser(storageId.externalId, userHandle.asUserHandle())
+    }
+
+    @Throws(IllegalStateException::class)
+    suspend fun getTotalBytes(id: StorageId): Long {
+        val value = osStatManager.getTotalBytes(id.externalId)
+        if (value == ERRROR_MIN || value == ERROR_MAX) throw IllegalStateException("Total bytes is $value")
+        return value
+    }
+
+    @Throws(IllegalStateException::class)
+    suspend fun getFreeBytes(id: StorageId): Long {
+        val value = osStatManager.getFreeBytes(id.externalId)
+        if (value == ERRROR_MIN || value == ERROR_MAX) throw IllegalStateException("Total bytes is $value")
+        return value
+    }
+
+    companion object {
+        // using get*Bytes on a 512GB sdcard leads to invalid values being returned
+        // See https://github.com/d4rken-org/sdmaid-se/issues/1575
+        private const val ERROR_MAX = 1000000000000L
+        private const val ERRROR_MIN = 0L
+        val TAG: String = logTag("StorageStatsManager2")
+    }
+}

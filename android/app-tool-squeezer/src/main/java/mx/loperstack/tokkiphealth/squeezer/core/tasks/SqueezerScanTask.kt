@@ -1,0 +1,69 @@
+package mx.loperstack.tokkiphealth.squeezer.core.tasks
+
+import mx.loperstack.tokkiphealth.squeezer.R
+import mx.loperstack.tokkiphealth.common.ByteFormatter
+import mx.loperstack.tokkiphealth.common.ca.caString
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.getQuantityString2
+import kotlinx.parcelize.Parcelize
+
+@Parcelize
+data class SqueezerScanTask(
+    val paths: Set<APath>? = null,
+) : SqueezerTask {
+
+    sealed interface Result : SqueezerTask.Result
+
+    @Parcelize
+    data class Success(
+        private val itemCount: Int,
+        private val totalSize: Long,
+        private val estimatedSavings: Long,
+        private val skippedInaccessibleCount: Int = 0,
+        private val skippedLossyAuxCount: Int = 0,
+        private val skippedMotionPhotoCount: Int = 0,
+        private val skippedOversizedCount: Int = 0,
+    ) : Result {
+        override val primaryInfo
+            get() = caString {
+                getQuantityString2(R.plurals.squeezer_result_x_images_found, itemCount)
+            }
+
+        override val secondaryInfo
+            get() = caString {
+                val (text, quantity) = ByteFormatter.formatSize(this, estimatedSavings)
+                val fragments = mutableListOf(
+                    getQuantityString2(R.plurals.squeezer_result_x_estimated_savings, quantity, text),
+                )
+                if (skippedInaccessibleCount > 0) {
+                    fragments += getQuantityString2(
+                        R.plurals.squeezer_result_x_skipped_inaccessible,
+                        skippedInaccessibleCount,
+                        skippedInaccessibleCount,
+                    )
+                }
+                if (skippedLossyAuxCount > 0) {
+                    fragments += getQuantityString2(
+                        R.plurals.squeezer_result_x_skipped_lossy_aux,
+                        skippedLossyAuxCount,
+                        skippedLossyAuxCount,
+                    )
+                }
+                if (skippedMotionPhotoCount > 0) {
+                    fragments += getQuantityString2(
+                        R.plurals.squeezer_result_x_skipped_motion_photo,
+                        skippedMotionPhotoCount,
+                        skippedMotionPhotoCount,
+                    )
+                }
+                if (skippedOversizedCount > 0) {
+                    fragments += getQuantityString2(
+                        R.plurals.squeezer_result_x_skipped_oversized,
+                        skippedOversizedCount,
+                        skippedOversizedCount,
+                    )
+                }
+                fragments.joinToString(" • ")
+            }
+    }
+}

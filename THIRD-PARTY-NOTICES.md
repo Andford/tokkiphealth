@@ -37,3 +37,12 @@ SOFTWARE.
 ```
 
 Tokkip's art, motion and sounds are Tokkip's own (Andford/tokkip).
+
+## SD Maid SE (Android)
+
+`android/` is a fork of SD Maid SE by Matthias Urhahn (darken),
+https://github.com/d4rken-org/sdmaid-se, under the GNU General Public License
+v3.0 (full text in `android/LICENSE`). The Android app is therefore GPL-3.0;
+the PC app keeps its own license. SD Maid SE's icons, mascot, animations,
+store texts and translations are not used.
+

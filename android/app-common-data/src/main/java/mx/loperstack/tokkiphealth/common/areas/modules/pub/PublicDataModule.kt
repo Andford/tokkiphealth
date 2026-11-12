@@ -1,0 +1,150 @@
+package mx.loperstack.tokkiphealth.common.areas.modules.pub
+
+import dagger.Binds
+import dagger.Module
+import dagger.Reusable
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.areas.DataArea
+import mx.loperstack.tokkiphealth.common.areas.modules.DataAreaModule
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.GatewaySwitch
+import mx.loperstack.tokkiphealth.common.files.canRead
+import mx.loperstack.tokkiphealth.common.files.listFiles
+import mx.loperstack.tokkiphealth.common.files.local.LocalPath
+import mx.loperstack.tokkiphealth.common.files.lookup
+import mx.loperstack.tokkiphealth.common.files.saf.SAFPath
+import mx.loperstack.tokkiphealth.common.hasApiLevel
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.root.canUseRootNow
+import mx.loperstack.tokkiphealth.common.storage.PathMapper
+import java.io.IOException
+import javax.inject.Inject
+
+@Reusable
+class PublicDataModule @Inject constructor(
+    private val gatewaySwitch: GatewaySwitch,
+    private val pathMapper: PathMapper,
+    private val adbManager: AdbManager,
+    private val rootManager: RootManager,
+) : DataAreaModule {
+
+    override suspend fun secondPass(firstPass: Collection<DataArea>): Collection<DataArea> {
+        val sdcardAreas = firstPass.filter { it.type == DataArea.Type.SDCARD }
+
+        val areas = sdcardAreas
+            .mapNotNull { parentArea ->
+                val accessPath = try {
+                    parentArea.determineAndroidData()
+                } catch (e: IOException) {
+                    log(TAG, WARN) { "Failed to determine accessPath for $parentArea: ${e.asLog()}" }
+                    null
+                }
+
+                accessPath?.let { parentArea to it }
+            }
+            .filter { (area, path) ->
+                val canRead = try {
+                    path.canRead(gatewaySwitch)
+                } catch (e: IOException) {
+                    log(TAG, ERROR) { "Failed canRead() for $area: ${e.asLog()}" }
+                    return@filter false
+                }
+                if (!canRead) {
+                    log(TAG) { "Can't read $area" }
+                    return@filter false
+                }
+
+                try {
+                    path.lookup(gatewaySwitch)
+                } catch (e: IOException) {
+                    log(TAG, ERROR) { "Failed lookup() for $area: ${e.asLog()}" }
+                    return@filter false
+                }
+
+                try {
+                    path.listFiles(gatewaySwitch)
+                } catch (e: IOException) {
+                    log(TAG, ERROR) { "Failed listFiles() for $area: ${e.asLog()}" }
+                    return@filter false
+                }
+
+                true
+            }
+            .map { (parentArea, path) ->
+                DataArea(
+                    type = DataArea.Type.PUBLIC_DATA,
+                    path = path,
+                    flags = parentArea.flags,
+                    userHandle = parentArea.userHandle,
+                )
+            }
+
+        log(TAG, VERBOSE) { "secondPass(): $areas" }
+
+        return areas
+    }
+
+    private suspend fun DataArea.determineAndroidData(): APath? {
+        val parentArea = this
+        val target = this.path.child("Android", "data")
+
+        return when {
+            hasApiLevel(33) -> {
+                when {
+                    // If we have root, we need to convert any SAFPath back
+                    rootManager.canUseRootNow() || adbManager.canUseAdbNow() -> {
+                        when (target) {
+                            is LocalPath -> target
+                            is SAFPath -> pathMapper.toLocalPath(target)
+                            else -> null
+                        }
+                    }
+
+                    else -> {
+                        log(TAG, INFO) { "Skipping Android/data (API33, no root/adb): $parentArea" }
+                        null
+                    }
+                }
+            }
+
+            hasApiLevel(30) -> {
+                when {
+                    // Can't use SAFPath with Shizuku or Root
+                    rootManager.canUseRootNow() || adbManager.canUseAdbNow() -> when (target) {
+                        is SAFPath -> pathMapper.toLocalPath(target)
+                        else -> target
+                    }
+                    // On API30 we can do the direct SAF grant workaround
+                    else -> when (target) {
+                        is LocalPath -> pathMapper.toSAFPath(target)
+                        is SAFPath -> target
+                        else -> null
+                    }
+                }
+            }
+
+            else -> target
+        }
+    }
+
+    @InstallIn(SingletonComponent::class)
+    @Module
+    abstract class DIM {
+        @Binds @IntoSet abstract fun mod(mod: PublicDataModule): DataAreaModule
+    }
+
+    companion object {
+        val TAG: String = logTag("DataArea", "Module", "Public", "Data")
+    }
+}

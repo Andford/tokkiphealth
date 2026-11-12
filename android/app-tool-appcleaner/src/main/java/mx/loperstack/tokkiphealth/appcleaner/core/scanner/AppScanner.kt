@@ -1,0 +1,582 @@
+package mx.loperstack.tokkiphealth.appcleaner.core.scanner
+
+import android.content.Context
+import mx.loperstack.tokkiphealth.appcleaner.R
+import dagger.hilt.android.qualifiers.ApplicationContext
+import mx.loperstack.tokkiphealth.appcleaner.core.AppCleanerSettings
+import mx.loperstack.tokkiphealth.appcleaner.core.AppJunk
+import mx.loperstack.tokkiphealth.appcleaner.core.limitToTrimBlastRadius
+import mx.loperstack.tokkiphealth.appcleaner.core.pruneOrphanedExclusionLimited
+import mx.loperstack.tokkiphealth.appcleaner.core.forensics.ExpendablesFilter
+import mx.loperstack.tokkiphealth.appcleaner.core.forensics.ExpendablesFilterIdentifier
+import mx.loperstack.tokkiphealth.appcleaner.core.forensics.filter.DefaultCachesPublicFilter
+import mx.loperstack.tokkiphealth.common.ModeUnavailableException
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.areas.DataArea
+import mx.loperstack.tokkiphealth.common.areas.DataAreaManager
+import mx.loperstack.tokkiphealth.common.areas.currentAreas
+import mx.loperstack.tokkiphealth.common.ca.CaString
+import mx.loperstack.tokkiphealth.common.ca.toCaString
+import mx.loperstack.tokkiphealth.common.clutter.ClutterRepo
+import mx.loperstack.tokkiphealth.common.clutter.Marker
+import mx.loperstack.tokkiphealth.common.clutter.hasFlags
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.Bugs
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APathGateway
+import mx.loperstack.tokkiphealth.common.files.FileType
+import mx.loperstack.tokkiphealth.common.files.GatewaySwitch
+import mx.loperstack.tokkiphealth.common.files.ReadException
+import mx.loperstack.tokkiphealth.common.files.exists
+import mx.loperstack.tokkiphealth.common.files.listFiles
+import mx.loperstack.tokkiphealth.common.files.lookupFiles
+import mx.loperstack.tokkiphealth.common.files.removePrefix
+import mx.loperstack.tokkiphealth.common.files.startsWith
+import mx.loperstack.tokkiphealth.common.files.walk
+import mx.loperstack.tokkiphealth.common.flow.throttleLatest
+import mx.loperstack.tokkiphealth.common.forensics.AreaInfo
+import mx.loperstack.tokkiphealth.common.forensics.FileForensics
+import mx.loperstack.tokkiphealth.common.forensics.identifyArea
+import mx.loperstack.tokkiphealth.common.pkgs.Pkg
+import mx.loperstack.tokkiphealth.common.pkgs.PkgRepo
+import mx.loperstack.tokkiphealth.common.pkgs.container.NormalPkg
+import mx.loperstack.tokkiphealth.common.pkgs.current
+import mx.loperstack.tokkiphealth.common.pkgs.features.InstallId
+import mx.loperstack.tokkiphealth.common.pkgs.features.Installed
+import mx.loperstack.tokkiphealth.common.pkgs.getPrivateDataDirs
+import mx.loperstack.tokkiphealth.common.pkgs.isSystemApp
+import mx.loperstack.tokkiphealth.common.pkgs.pkgops.PkgOps
+import mx.loperstack.tokkiphealth.common.pkgs.pkgops.PkgOpsException
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.progress.increaseProgress
+import mx.loperstack.tokkiphealth.common.progress.updateProgressCount
+import mx.loperstack.tokkiphealth.common.progress.updateProgressPrimary
+import mx.loperstack.tokkiphealth.common.progress.updateProgressSecondary
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.root.canUseRootNow
+import mx.loperstack.tokkiphealth.common.user.UserManager2
+import mx.loperstack.tokkiphealth.exclusion.core.ExclusionManager
+import mx.loperstack.tokkiphealth.exclusion.core.pathExclusions
+import mx.loperstack.tokkiphealth.exclusion.core.pkgExclusions
+import mx.loperstack.tokkiphealth.exclusion.core.types.PathExclusionIndex
+import mx.loperstack.tokkiphealth.main.core.SDMTool
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emptyFlow
+import java.time.Instant
+import javax.inject.Inject
+
+
+class AppScanner @Inject constructor(
+    private val areaManager: DataAreaManager,
+    private val gatewaySwitch: GatewaySwitch,
+    private val filterFactories: Set<@JvmSuppressWildcards ExpendablesFilter.Factory>,
+    private val postProcessorModule: PostProcessorModule,
+    @ApplicationContext private val context: Context,
+    private val fileForensics: FileForensics,
+    private val rootManager: RootManager,
+    private val exclusionManager: ExclusionManager,
+    private val pkgRepo: PkgRepo,
+    private val clutterRepo: ClutterRepo,
+    private val settings: AppCleanerSettings,
+    private val inaccessibleCacheProvider: InaccessibleCacheProvider,
+    private val userManager: UserManager2,
+    private val pkgOps: PkgOps,
+    private val adbManager: AdbManager,
+) : Progress.Host, Progress.Client {
+
+    private val progressPub = MutableStateFlow<Progress.Data?>(
+        Progress.Data(primary = mx.loperstack.tokkiphealth.common.R.string.general_progress_preparing.toCaString())
+    )
+    override val progress: Flow<Progress.Data?> = progressPub.throttleLatest(250)
+
+    override fun updateProgress(update: (Progress.Data?) -> Progress.Data?) {
+        progressPub.value = update(progressPub.value)
+    }
+
+    private lateinit var enabledFilters: Collection<ExpendablesFilter>
+
+    suspend fun initialize() {
+        log(TAG, VERBOSE) { "initialize()" }
+        enabledFilters = filterFactories
+            .filter { it.isEnabled() }
+            .map { it.create() }
+            .onEach { it.initialize() }
+            .onEach { log(TAG, VERBOSE) { "Filter enabled: $it" } }
+        log(TAG) { "${enabledFilters.size} filter are enabled" }
+    }
+
+    suspend fun scan(
+        pkgFilter: Collection<Pkg.Id> = emptySet()
+    ): Collection<AppJunk> {
+        log(TAG, INFO) { "scan(pkgFilter=$pkgFilter)" }
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_preparing)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        if (enabledFilters.isEmpty()) {
+            log(TAG, WARN) { "0 enabled filter !?" }
+            return emptySet()
+        }
+
+        val includeSystemApps = settings.includeSystemAppsEnabled.value()
+        val includeRunningApps = settings.includeRunningAppsEnabled.value()
+        val includeOtherUsers = settings.includeOtherUsersEnabled.value()
+
+        val pkgExclusions = exclusionManager.pkgExclusions(SDMTool.Type.APPCLEANER)
+
+        // Whether a whole-tool clean would issue the device-global ADB cache trim, which carries no
+        // package identity and so reaches excluded apps too. Mirrors the skip conditions of
+        // `determineInaccessibleCaches(...)` plus ADB availability.
+        val trimBlastRadiusPossible = adbManager.canUseAdbNow()
+            && !rootManager.canUseRootNow()
+            && settings.includeInaccessibleEnabled.value()
+            && settings.filterDefaultCachesPublicEnabled.value()
+            && settings.filterDefaultCachesPrivateEnabled.value()
+        log(TAG) { "trimBlastRadiusPossible=$trimBlastRadiusPossible" }
+
+        val exclusionLimited = mutableSetOf<InstallId>()
+
+        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+
+        val runningPkgs = try {
+            if (includeRunningApps) pkgOps.getRunningPackages() else emptySet()
+        } catch (e: PkgOpsException) {
+            if (e.cause !is ModeUnavailableException) throw e
+            log(TAG, WARN) { "No mode available to execute getRunningPackages(): ${e.cause ?: e}" }
+            emptySet()
+        }
+
+        val currentUser = userManager.currentUser()
+        val allUsers = userManager.allUsers()
+        val allCurrentPkgs = pkgRepo.current()
+            .filter { includeOtherUsers || it.userHandle == currentUser.handle }
+            .filter { includeSystemApps || !it.isSystemApp }
+            .filter { includeRunningApps || !runningPkgs.contains(it.installId) }
+            .filter { pkgFilter.isEmpty() || pkgFilter.contains(it.id) }
+            .filter { pkg ->
+                val isExcluded = pkgExclusions.any { it.match(pkg.id) }
+                if (isExcluded) log(TAG, INFO) { "Excluded package: ${pkg.id}" }
+                if (isExcluded && trimBlastRadiusPossible) {
+                    exclusionLimited.add(pkg.installId)
+                    true
+                } else {
+                    !isExcluded
+                }
+            }
+            .filter { it.id.name != context.packageName }
+
+        log(TAG) { "${allCurrentPkgs.size} apps to check :)" }
+
+        val expendablesFromAppData: Map<InstallId, Collection<ExpendablesFilter.Match>> =
+            buildSearchMap(allCurrentPkgs)
+                .onEach { log(TAG) { "Searchmap contains ${it.value.size} pathes for ${it.key}." } }
+                .let { readAppDirs(it, exclusionLimited) }
+
+        val inaccessibleCaches = determineInaccessibleCaches(allCurrentPkgs)
+        log(TAG) { "Determined ${inaccessibleCaches.size} in accessible caches" }
+
+        val appJunks = allCurrentPkgs.mapNotNull { pkg ->
+            val expendables = expendablesFromAppData[pkg.installId]
+            var inaccessible = inaccessibleCaches.firstOrNull { pkg.installId == it.identifier }
+            if (expendables.isNullOrEmpty() && inaccessible == null) return@mapNotNull null
+
+            val byFilterType: Map<ExpendablesFilterIdentifier, Collection<ExpendablesFilter.Match>>? =
+                expendables?.groupBy { it.identifier }
+
+            // For <API31 we can improve accuracy manually
+            if (inaccessible != null && byFilterType != null && inaccessible.publicSize == null) {
+                inaccessible = inaccessible.copy(
+                    publicSize = byFilterType[DefaultCachesPublicFilter::class]?.sumOf { it.expectedGain }
+                )
+                log(TAG) { "Guesstimated external cache size as ${inaccessible.publicSize}" }
+            }
+
+            val isExclusionLimited = exclusionLimited.contains(pkg.installId)
+            val junk = AppJunk(
+                pkg = pkg,
+                userProfile = if (includeOtherUsers) allUsers.singleOrNull { it.handle == pkg.userHandle } else null,
+                expendables = byFilterType,
+                inaccessibleCache = inaccessible,
+                isExclusionLimited = isExclusionLimited,
+            )
+
+            if (isExclusionLimited) junk.limitToTrimBlastRadius() else junk
+        }
+
+        log(TAG) { "Found ${expendablesFromAppData.size} apps with expendable files" }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_filtering)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        val prunedAppJunks = postProcessorModule.postProcess(appJunks).pruneOrphanedExclusionLimited()
+        log(TAG, INFO) { "After purging empties we have ${prunedAppJunks.size} apps." }
+
+        prunedAppJunks.forEach { appJunk ->
+            appJunk.inaccessibleCache?.let { log(TAG, INFO) { "AppJunk-${appJunk.pkg.id}: Inaccessible: $it" } }
+            appJunk.expendables?.forEach {
+                log(TAG, INFO) { "AppJunk-${appJunk.pkg.id}: ${it.key.simpleName} with ${it.value.size} items" }
+            }
+        }
+        log(TAG, INFO) { "${prunedAppJunks.sumOf { it.size }} bytes can be freed across ${prunedAppJunks.size} apps" }
+
+        return prunedAppJunks
+    }
+
+    private suspend fun buildSearchMap(
+        pkgsToCheck: Collection<Installed>,
+    ): Map<AreaInfo, Collection<InstallId>> {
+        updateProgressSecondary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_data_areas)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        val currentAreas = areaManager.currentAreas()
+        val dataAreaMap = createDataAreaMap(currentAreas)
+
+        val searchPathMap = mutableMapOf<AreaInfo, Collection<InstallId>>()
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_generating_searchpaths)
+        updateProgressCount(Progress.Count.Percent(pkgsToCheck.size))
+
+        for (pkg in pkgsToCheck) {
+            updateProgressSecondary(pkg.label?.get(context) ?: pkg.packageName, extra = pkg)
+            log(TAG) { "Generating search paths for ${pkg.installId}" }
+
+            val interestingPaths = mutableSetOf<AreaInfo>()
+
+            // Private data should only be available in currentAreas if we have root
+            currentAreas
+                .filter { it.type == DataArea.Type.PRIVATE_DATA }
+                .takeIf { it.isNotEmpty() }
+                ?.let { pkg.getPrivateDataDirs(it) }
+                ?.filter { it.exists(gatewaySwitch) }
+                ?.map { fileForensics.identifyArea(it)!! }
+                ?.forEach { interestingPaths.add(it) }
+
+            // Check for shortcut service bitmap caches in system_ce areas
+            currentAreas
+                .filter { it.type == DataArea.Type.DATA_SYSTEM_CE }
+                .map { area ->
+                    // Path: /data/system_ce/{userId}/shortcut_service/bitmaps/{packageName}
+                    area.path.child("shortcut_service", "bitmaps", pkg.packageName)
+                }
+                .filter { it.exists(gatewaySwitch) }
+                .mapNotNull { fileForensics.identifyArea(it) }
+                .forEach { interestingPaths.add(it) }
+
+            val clutterMarkerForPkg = clutterRepo.getMarkerForPkg(pkg.id)
+
+            dataAreaMap.values
+                .flatten()
+                .forEach { candidate ->
+                    // Is it a direct match? Should be valid for PUBLIC_* (i.e. blacklist areas)
+                    if (candidate.type != DataArea.Type.SDCARD && candidate.file.name == pkg.packageName) {
+                        interestingPaths.add(candidate)
+                        return@forEach
+                    }
+
+                    // Maybe an outlier that can be mapped via clutter db?
+                    val indirectMatch = clutterMarkerForPkg
+                        .filter { it.areaType == candidate.type }
+                        .filter { !it.hasFlags(Marker.Flag.CUSTODIAN) }
+                        .any { it.match(candidate.type, candidate.prefixFreeSegments) != null }
+                    if (indirectMatch) interestingPaths.add(candidate)
+                }
+
+            // Check all files on public (whitelist) storage (i.e. SDCARD) for potentially deeper nested clutter
+            dataAreaMap[DataArea.Type.SDCARD]
+                ?.forEach { topLevelArea ->
+                    clutterMarkerForPkg
+                        .filter { it.areaType == topLevelArea.type }
+                        .filter { !it.hasFlags(Marker.Flag.CUSTODIAN) }
+                        .filter { it.isDirectMatch } // Can't reverse lookup regex markers
+                        .filter { it.segments.startsWith(topLevelArea.prefixFreeSegments, ignoreCase = true) }
+                        .map { topLevelArea.prefix.child(*it.segments.toTypedArray()) }
+                        .filter { it.exists(gatewaySwitch) }
+                        .onEach { log(TAG) { "Nested marker target exists: $it" } }
+                        .mapNotNull { fileForensics.identifyArea(it) }
+                        .forEach { interestingPaths.add(it) }
+                }
+
+            if (Bugs.isTrace) {
+                log(TAG, VERBOSE) {
+                    val paths = interestingPaths.map { it.file }.joinToString()
+                    "Search paths for ${pkg.installId} are: $paths"
+                }
+            }
+
+            // To build the search map we find all pathes that belong to an app: One App multiple pathes
+            // Then we reverse the mapping here as each location can have multiple owners: One path, multiple apps
+            // In the next step we will attribute each location to a single owner
+            for (path in interestingPaths) {
+                searchPathMap[path] = (searchPathMap[path] ?: emptySet()).plus(pkg.installId)
+            }
+
+
+            increaseProgress()
+        }
+
+        // So far we have default blacklist entries and matches from direct clutter markers
+        // We are missing dynamic markers especially from blacklist locations like PUBLIC_DATA.
+        // i.e. Android/data/_some.pkg or Android/data/-some.pkg is dynamically matched to some.pkg by CSI
+        dataAreaMap.entries
+            .map { it.value }
+            .flatten()
+            .map { fileForensics.findOwners(it) }
+            .forEach { ownerInfo ->
+                val installIds = ownerInfo.installedOwners
+                    .filter { !it.hasFlag(Marker.Flag.CUSTODIAN) }
+                    .filter { installedOwner ->
+                        // The app may be installed, but also excluded from scan
+                        pkgsToCheck.any { installedOwner.installId == it.installId }.also {
+                            if (!it) log(TAG) { "$installedOwner is excluded " }
+                        }
+                    }
+                    .map { it.installId }
+                    .takeIf { it.isNotEmpty() }
+
+                if (installIds == null) {
+                    log(TAG) { "${ownerInfo.item} has no valid owners, excluding from search map... ${ownerInfo.installedOwners}" }
+                    return@forEach
+                }
+
+                searchPathMap[ownerInfo.areaInfo] = (searchPathMap[ownerInfo.areaInfo] ?: emptySet()).plus(installIds)
+            }
+
+        log(TAG) { "Search paths build (${searchPathMap.keys.size} interesting paths)." }
+
+        return searchPathMap
+    }
+
+    /**
+     * First we determine all areas that we check,
+     * i.e. public/priv storage and some levels of the root of the sdcard
+     */
+    private suspend fun createDataAreaMap(currentAreas: Collection<DataArea>): Map<DataArea.Type, Collection<AreaInfo>> {
+        val exclusionIndex = PathExclusionIndex(exclusionManager.pathExclusions(SDMTool.Type.APPCLEANER))
+
+        val areaDataMap = mutableMapOf<DataArea.Type, Collection<AreaInfo>>()
+
+        val supportedPrivateAreas = setOf(DataArea.Type.PRIVATE_DATA)
+
+        currentAreas
+            .filter { supportedPrivateAreas.contains(it.type) }
+            .mapNotNull { area ->
+                try {
+                    area to area.path.listFiles(gatewaySwitch)
+                } catch (e: ReadException) {
+                    log(TAG, ERROR) { "Failed to list $area: ${e.asLog()}" }
+                    null
+                }
+            }
+            .map { (area, content) ->
+                area.type to content
+                    .filter { path ->
+                        val isExcluded = exclusionIndex.matches(path)
+                        if (isExcluded) log(TAG, INFO) { "Excluded during PRIVATE_DATA scan: $path" }
+                        !isExcluded
+                    }
+                    .mapNotNull { path ->
+                        fileForensics.identifyArea(path).also {
+                            if (it == null) log(TAG, WARN) { "Failed to identify $path" }
+                        }
+                    }
+            }
+            .forEach { (type, infos) ->
+                areaDataMap[type] = (areaDataMap[type] ?: emptySet()).plus(infos)
+            }
+
+        val supportedPublicAreas = setOf(
+            DataArea.Type.PUBLIC_DATA,
+            DataArea.Type.PUBLIC_MEDIA,
+            DataArea.Type.SDCARD,
+        )
+        val useRoot = rootManager.canUseRootNow()
+
+        currentAreas
+            .filter { supportedPublicAreas.contains(it.type) }
+            .mapNotNull { area ->
+                try {
+                    area to area.path.lookupFiles(gatewaySwitch)
+                } catch (e: ReadException) {
+                    log(TAG, ERROR) { "Failed to lookup $area: ${e.asLog()}" }
+                    null
+                }
+            }
+            .map { (area, content) ->
+                area.type to content
+                    .filter { it.fileType == FileType.DIRECTORY }
+                    .mapNotNull { lookup ->
+                        fileForensics.identifyArea(lookup).also {
+                            if (it == null) log(TAG, WARN) { "Failed to identify $lookup" }
+                        }
+                    }
+                    .filter { areaInfo ->
+                        val excluded = exclusionIndex.matches(areaInfo.file)
+                        val edgeCase = !useRoot && area.type == DataArea.Type.PUBLIC_DATA
+                                && areaInfo.prefixFreeSegments.size >= 2
+                                && areaInfo.prefixFreeSegments[1] == "cache"
+                        if (excluded && edgeCase) {
+                            log(TAG, WARN) { "Exclusion skipped to do default cache coverage: $areaInfo" }
+                        } else if (excluded) {
+                            log(TAG, WARN) { "Excluded during public area scan: $areaInfo" }
+                        }
+                        !excluded || edgeCase
+                    }
+            }
+            .forEach { (type, infos) ->
+                areaDataMap[type] = (areaDataMap[type] ?: emptySet()).plus(infos)
+            }
+
+        return areaDataMap
+    }
+
+    // internal: exercised directly by AppScannerTest, the public scan() needs the full pkg/area setup
+    internal suspend fun readAppDirs(
+        searchPathsOfInterest: Map<AreaInfo, Collection<InstallId>>,
+        exclusionLimited: Set<InstallId> = emptySet(),
+    ): Map<InstallId, Collection<ExpendablesFilter.Match>> {
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_searching)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Percent(searchPathsOfInterest.size))
+
+        val minCacheAgeMs = settings.minCacheAgeMs.value()
+        val cutOffAge = Instant.now().minusMillis(minCacheAgeMs)
+        log(TAG) { "minCacheAgeMs=$minCacheAgeMs -> Cut off after $cutOffAge" }
+
+        val results = HashMap<InstallId, Collection<ExpendablesFilter.Match>>()
+
+        val systemUser = userManager.systemUser()
+
+        searchPathsOfInterest.entries.forEach spoi@{ target ->
+            log(TAG, VERBOSE) { "Searching ${target.key.file} (${target.value})" }
+            updateProgressSecondary(target.key.file.userReadablePath)
+
+            val searchPath = target.key
+            val possibleOwners = target.value
+
+            val ownersOfInterest = possibleOwners
+                .filter { searchPath.userHandle == systemUser.handle || it.userHandle == searchPath.userHandle }
+                // A match goes to the first owner whose filter hits. Limited owners go last so a
+                // co-owned path keeps being attributed to the owner that reports it today.
+                .sortedBy { exclusionLimited.contains(it) }
+                .onEach { if (Bugs.isTrace) log(TAG, VERBOSE) { "Owners of interest for $target: \n${it.pkgId}" } }
+
+            val walkFlow = try {
+                searchPath.file.walk(
+                    gatewaySwitch,
+                    options = APathGateway.WalkOptions(
+                        pathDoesNotContain = setOf(
+                            "/org.winehq.wine/files/prefix",
+                            "/.wine/",
+                        )
+                    )
+                )
+            } catch (e: ReadException) {
+                log(TAG, WARN) { "Failed to read ${searchPath.file}: ${e.asLog()}" }
+                emptyFlow()
+            }
+
+            walkFlow
+                // Producer-only error handling: a read error ends this search path gracefully,
+                // while matcher exceptions below surface at collect and fail the scan, as they
+                // did before streaming.
+                .catch { e ->
+                    if (e !is ReadException) throw e
+                    log(TAG, WARN) { "Failed to read ${searchPath.file}: ${e.asLog()}" }
+                }
+                // Decouples matching from the walker: a matcher exception must fail the scan,
+                // not unwind inside the walker's emit where EscalatingWalker would catch it,
+                // retry in other modes and silently skip the remaining siblings.
+                .buffer(1024)
+                .collect { item ->
+                    // Per-item progress: a single huge folder otherwise pins the display
+                    // on the search path for minutes, looking like a hang
+                    updateProgressSecondary(item.userReadablePath)
+
+                    if (minCacheAgeMs != 0L && item.modifiedAt >= cutOffAge) return@collect
+
+                    // Safety check so no random files got linked in here when walking the tree
+                    if (!item.segments.startsWith(searchPath.file.segments)) return@collect
+
+                    // Filters expect a prefix free path, so we have to remove the data area prefix
+                    val pfpSegs = item.removePrefix(searchPath.prefix, overlap = 0)
+                    if (Bugs.isTrace) {
+                        log(TAG, VERBOSE) {
+                            "Path of interest for ${target.key.file.path} (${target.value}}: \n ${item.path}|$pfpSegs"
+                        }
+                    }
+
+                    for (installId in ownersOfInterest) {
+                        val match = enabledFilters.firstNotNullOfOrNull { filter ->
+                            filter.match(
+                                pkgId = installId.pkgId,
+                                target = item,
+                                areaType = searchPath.type,
+                                pfpSegs = pfpSegs,
+                            )
+
+                        } ?: continue
+
+                        log(TAG, INFO) { "${match.identifier.simpleName} matched ${searchPath.type}:$pfpSegs" }
+                        results[installId] = (results[installId] ?: emptySet()).plus(match)
+                        break
+                    }
+                }
+
+            increaseProgress()
+        }
+
+        return results.onEach { if (Bugs.isTrace) log(TAG, VERBOSE) { "readAppDirs(...): $it" } }
+    }
+
+    private suspend fun determineInaccessibleCaches(
+        pkgs: Collection<Installed>,
+    ): Collection<InaccessibleCache> {
+        log(TAG, VERBOSE) { "determineInaccessibleCaches(${pkgs.size})" }
+        if (!settings.includeInaccessibleEnabled.value() || rootManager.canUseRootNow()) {
+            log(TAG) { "determineInaccessibleCaches(...) SKIPPING, better options are available" }
+            return emptyList()
+        }
+        if (!settings.filterDefaultCachesPublicEnabled.value() || !settings.filterDefaultCachesPrivateEnabled.value()) {
+            log(TAG) { "determineInaccessibleCaches(...) SKIPPING, filter for default caches are not enabled" }
+            return emptyList()
+        }
+
+        updateProgressPrimary(R.string.appcleaner_progress_determining_inaccessible_caches)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        val currentUser = userManager.currentUser()
+
+        // Detection deliberately runs even when ACS is off, otherwise users would never see what
+        // the ACS option could do for them. It is also backend-neutral: ROM specific limitations
+        // (e.g. One UI can't open the settings page of disabled apps) only affect ACS automation
+        // and are handled by NoSettingsDetector during deletion. Root/ADB clean those just fine.
+        val targets = pkgs
+            .filter { it.userHandle == currentUser.handle }
+            .filterIsInstance<NormalPkg>()
+
+        // targets, not pkgs: the loop below increments once per target, so sizing the bar by the
+        // unfiltered package count leaves it short of 100% before it disappears.
+        updateProgressCount(Progress.Count.Percent(targets.size))
+
+        return targets
+            .mapNotNull {
+                updateProgressSecondary(it.label, extra = it)
+                inaccessibleCacheProvider.determineCache(it).also { increaseProgress() }
+            }
+            .filter { !it.isEmpty }
+            .onEach { if (Bugs.isTrace) log(TAG, VERBOSE) { "determineInaccessibleCaches(...) -> $it" } }
+    }
+
+    companion object {
+        private val TAG = logTag("AppCleaner", "Scanner")
+    }
+}

@@ -1,0 +1,639 @@
+package mx.loperstack.tokkiphealth.appcontrol.core
+
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
+import mx.loperstack.tokkiphealth.appcontrol.core.archive.ArchiveException
+import mx.loperstack.tokkiphealth.appcontrol.core.archive.ArchiveSupport
+import mx.loperstack.tokkiphealth.appcontrol.core.archive.ArchiveTask
+import mx.loperstack.tokkiphealth.appcontrol.core.archive.ArchiveUnavailableException
+import mx.loperstack.tokkiphealth.appcontrol.core.archive.Archiver
+import mx.loperstack.tokkiphealth.appcontrol.core.export.AppExportTask
+import mx.loperstack.tokkiphealth.appcontrol.core.export.AppExporter
+import mx.loperstack.tokkiphealth.appcontrol.core.forcestop.ForceStopTask
+import mx.loperstack.tokkiphealth.appcontrol.core.forcestop.ForceStopper
+import mx.loperstack.tokkiphealth.appcontrol.core.restore.RestoreException
+import mx.loperstack.tokkiphealth.appcontrol.core.restore.RestoreTask
+import mx.loperstack.tokkiphealth.appcontrol.core.restore.RestoreUnavailableException
+import mx.loperstack.tokkiphealth.appcontrol.core.restore.Restorer
+import mx.loperstack.tokkiphealth.appcontrol.core.toggle.AppControlToggleTask
+import mx.loperstack.tokkiphealth.appcontrol.core.toggle.ComponentToggler
+import mx.loperstack.tokkiphealth.appcontrol.core.uninstall.UninstallTask
+import mx.loperstack.tokkiphealth.appcontrol.core.uninstall.Uninstaller
+import mx.loperstack.tokkiphealth.automation.core.AutomationSubmitter
+import mx.loperstack.tokkiphealth.automation.core.errors.AutomationCompatibilityException
+import mx.loperstack.tokkiphealth.automation.core.errors.UnusableFailureBudget
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.ca.CaString
+import mx.loperstack.tokkiphealth.common.coroutine.AppScope
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.flow.replayingShare
+import mx.loperstack.tokkiphealth.common.pkgs.Pkg
+import mx.loperstack.tokkiphealth.common.pkgs.features.InstallId
+import mx.loperstack.tokkiphealth.common.pkgs.isEnabled
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.progress.increaseProgress
+import mx.loperstack.tokkiphealth.common.progress.updateProgressCount
+import mx.loperstack.tokkiphealth.common.progress.updateProgressPrimary
+import mx.loperstack.tokkiphealth.common.progress.updateProgressSecondary
+import mx.loperstack.tokkiphealth.common.progress.withProgress
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.root.canUseRootNow
+import mx.loperstack.tokkiphealth.common.sharedresource.SharedResource
+import mx.loperstack.tokkiphealth.common.sharedresource.keepResourceHoldersAlive
+import mx.loperstack.tokkiphealth.common.user.UserManager2
+import mx.loperstack.tokkiphealth.main.core.SDMTool
+import mx.loperstack.tokkiphealth.setup.IncompleteSetupException
+import mx.loperstack.tokkiphealth.setup.SetupModule
+import mx.loperstack.tokkiphealth.setup.SetupBinding
+import mx.loperstack.tokkiphealth.setup.isComplete
+import mx.loperstack.tokkiphealth.setup.isCurrentAndIncomplete
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Provider
+import javax.inject.Singleton
+
+@Singleton
+class AppControl @Inject constructor(
+    @AppScope private val appScope: CoroutineScope,
+    private val userManager: UserManager2,
+    private val componentToggler: ComponentToggler,
+    private val forceStopper: ForceStopper,
+    private val uninstaller: Uninstaller,
+    private val archiver: Archiver,
+    private val restorer: Restorer,
+    private val archiveSupport: ArchiveSupport,
+    @SetupBinding(SetupModule.Type.USAGE_STATS) usageStatsSetupModule: SetupModule,
+    @SetupBinding(SetupModule.Type.STORAGE) storageSetupModule: SetupModule,
+    private val rootManager: RootManager,
+    private val adbManager: AdbManager,
+    private val appExporterProvider: Provider<AppExporter>,
+    @SetupBinding(SetupModule.Type.INVENTORY) private val appInventorySetupModule: SetupModule,
+    automationManager: AutomationSubmitter,
+    private val appScan: AppScan,
+) : SDMTool, Progress.Client {
+
+    override val sharedResource = SharedResource.createKeepAlive(TAG, appScope)
+
+    private val progressPub = MutableStateFlow<Progress.Data?>(null)
+    override val progress: Flow<Progress.Data?> = progressPub
+    override fun updateProgress(update: (Progress.Data?) -> Progress.Data?) {
+        progressPub.value = update(progressPub.value)
+    }
+
+    private val internalData = MutableStateFlow(null as Data?)
+
+    override val type: SDMTool.Type = SDMTool.Type.APPCONTROL
+
+    override val state: Flow<State> = mx.loperstack.tokkiphealth.common.flow.combine(
+        internalData,
+        progress,
+        usageStatsSetupModule.state,
+        storageSetupModule.state,
+        automationManager.useAcs,
+        rootManager.useRoot,
+        adbManager.useAdb,
+    ) { data, progress, usageState, storageState, useAcs, useRoot, useAdb ->
+
+        State(
+            data = data,
+            progress = progress,
+            canInfoActive = usageState.isComplete || useRoot || useAdb,
+            canInfoSize = usageState.isComplete && storageState.isComplete,
+            canInfoScreenTime = usageState.isComplete,
+            canToggle = useRoot || useAdb,
+            canForceStop = useAcs || useRoot || useAdb,
+            canIncludeMultiUser = useRoot || useAdb,
+            canArchive = archiveSupport.isArchivingEnabled && (useRoot || useAdb || useAcs),
+            canRestore = archiveSupport.isArchivingEnabled && (useRoot || useAdb || useAcs),
+            missingSetup = setOfNotNull(
+                SetupModule.Type.USAGE_STATS.takeIf { usageState.isCurrentAndIncomplete },
+                SetupModule.Type.STORAGE.takeIf { storageState.isCurrentAndIncomplete },
+            ),
+        )
+    }.replayingShare(appScope)
+
+    private val jobLock = Mutex()
+    override suspend fun submit(task: SDMTool.Task): SDMTool.Task.Result = jobLock.withLock {
+        task as AppControlTask
+        log(TAG) { "submit($task) starting..." }
+        updateProgress { Progress.Data() }
+        try {
+            val result = keepResourceHoldersAlive(appScan) {
+                when (task) {
+                    is AppControlScanTask -> performScan(task)
+                    is AppControlToggleTask -> performToggle(task)
+                    is UninstallTask -> performUninstall(task)
+                    is AppExportTask -> performExportSave(task)
+                    is ForceStopTask -> performForceStop(task)
+                    is ArchiveTask -> performArchive(task)
+                    is RestoreTask -> performRestore(task)
+                    else -> throw UnsupportedOperationException("Unsupported task: $task")
+                }
+            }
+
+            log(TAG, INFO) { "submit($task) finished: $result" }
+            result
+        } finally {
+            updateProgress { null }
+        }
+    }
+
+    private suspend fun performScan(task: AppControlScanTask): AppControlScanTask.Result {
+        log(TAG, VERBOSE) { "performScan(): $task" }
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+
+        // Kept so a cancelled scan can hand the list back what it was already showing instead of
+        // the empty placeholder. An initial scan has nothing to restore, which is correct.
+        val previousData = internalData.value
+        internalData.value = null
+
+        try {
+            if (!appInventorySetupModule.isComplete()) {
+                log(TAG, WARN) { "SetupModule INVENTORY is not complete" }
+                throw IncompleteSetupException(SetupModule.Type.INVENTORY)
+            }
+
+            val curState = state.first()
+
+            val appInfos = appScan.withProgress(this) {
+                if (task.refreshPkgCache) refresh()
+                allApps(
+                    user = if (task.includeMultiUser) null else userManager.currentUser().handle,
+                    includeActive = task.loadInfoActive && curState.canInfoActive,
+                    includeSize = task.loadInfoSize && curState.canInfoSize,
+                    includeUsage = task.loadInfoScreenTime && curState.canInfoScreenTime,
+                )
+            }
+
+            internalData.value = Data(
+                apps = appInfos,
+                hasInfoScreenTime = task.loadInfoScreenTime && curState.canInfoScreenTime,
+                hasInfoActive = task.loadInfoActive && curState.canInfoActive,
+                hasInfoSize = task.loadInfoSize && curState.canInfoSize,
+                hasIncludedMultiUser = task.includeMultiUser && curState.canIncludeMultiUser,
+            )
+
+            return AppControlScanTask.Result(itemCount = appInfos.size)
+        } catch (e: CancellationException) {
+            log(TAG, INFO) { "performScan(): Cancelled, restoring the previous data" }
+            internalData.value = previousData
+            throw e
+        }
+    }
+
+    private suspend fun performToggle(task: AppControlToggleTask): AppControlToggleTask.Result {
+        log(TAG) { "performToggle(): $task" }
+
+        val snapshot = internalData.value ?: throw IllegalStateException("App data wasn't loaded")
+
+        val enabled = mutableSetOf<InstallId>()
+        val disabled = mutableSetOf<InstallId>()
+        val failed = mutableSetOf<InstallId>()
+        val skipped = mutableSetOf<InstallId>()
+
+        val (togglable, untogglable) = task.targets
+            .map { it to snapshot.apps.single { app -> app.installId == it } }
+            .partition { (_, target) -> target.canBeToggled }
+
+        untogglable.forEach { (targetId, target) ->
+            log(TAG, INFO) { "Skipping $targetId, it can't be toggled: ${target.pkg}" }
+            skipped.add(targetId)
+        }
+
+        if (togglable.isEmpty()) {
+            log(TAG, INFO) { "Nothing to toggle, ${skipped.size} targets were skipped" }
+            return AppControlToggleTask.Result(enabled, disabled, failed, skipped)
+        }
+
+        updateProgressCount(Progress.Count.Percent(togglable.size))
+
+        // Which state each target was asked to end up in, so the post-refresh data can be checked
+        // against it instead of trusting that `changePackageState` not throwing means it worked.
+        val intendedStates = mutableMapOf<InstallId, Boolean>()
+
+        componentToggler.useRes {
+            togglable.forEach { (targetId, target) ->
+                val oldState = target.pkg.isEnabled
+                val newState = !oldState
+                log(TAG) { "Toggeling $targetId enabled state $oldState -> $newState" }
+
+                updateProgressPrimary(target.label)
+                updateProgressSecondary(
+                    if (newState) mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_enabling_package
+                    else mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_disabling_package
+                )
+
+                try {
+                    componentToggler.changePackageState(target.installId, newState)
+                    if (newState) enabled.add(targetId) else disabled.add(targetId)
+                    intendedStates[targetId] = newState
+                    log(TAG, INFO) { "State successfully changed to $newState" }
+                } catch (e: Exception) {
+                    log(TAG, ERROR) { "Failed to change state for $targetId: ${e.asLog()}" }
+                    failed.add(targetId)
+                } finally {
+                    increaseProgress()
+                }
+            }
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        appScan.refresh()
+
+        val affectedPkgs = (enabled.map { it.pkgId } + disabled.map { it.pkgId } + failed.map { it.pkgId }).toSet()
+        val updatedPkgs = affectedPkgs.map {
+            appScan.app(
+                pkgId = it,
+                user = if (snapshot.hasIncludedMultiUser) null else userManager.currentUser().handle,
+                includeSize = snapshot.hasInfoSize,
+                includeActive = snapshot.hasInfoActive,
+                includeUsage = snapshot.hasInfoScreenTime,
+            )
+        }.flatten()
+
+        intendedStates.forEach { (targetId, intended) ->
+            val fresh = updatedPkgs.firstOrNull { it.installId == targetId }
+            val verified = when {
+                fresh == null -> {
+                    log(TAG, WARN) { "Can't verify $targetId, it's gone from the refreshed data" }
+                    false
+                }
+
+                fresh.pkg.isEnabled != intended -> {
+                    log(TAG, WARN) { "$targetId reports enabled=${fresh.pkg.isEnabled}, expected $intended" }
+                    false
+                }
+
+                else -> true
+            }
+            if (!verified) {
+                enabled.remove(targetId)
+                disabled.remove(targetId)
+                failed.add(targetId)
+            }
+        }
+
+        internalData.value = snapshot.copy(
+            apps = run {
+                val cleanedSnapshot = snapshot.apps.filterNot { affectedPkgs.contains(it.id) }
+                (cleanedSnapshot + updatedPkgs).distinctBy { it.installId }
+            }
+        )
+
+        return AppControlToggleTask.Result(enabled, disabled, failed, skipped)
+    }
+
+    private suspend fun performUninstall(task: UninstallTask): UninstallTask.Result {
+        log(TAG) { "performUninstall(): $task" }
+        updateProgressCount(Progress.Count.Counter(task.targets.size))
+
+        val snapshot = internalData.value ?: throw IllegalStateException("App data wasn't loaded")
+        val successful = mutableSetOf<InstallId>()
+        val failed = mutableSetOf<InstallId>()
+
+        uninstaller.useRes {
+            task.targets.forEach { targetId ->
+                val target = snapshot.apps.single { it.installId == targetId }
+                updateProgressPrimary(target.label)
+                updateProgressSecondary(mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_uninstalling_app)
+
+                try {
+                    uninstaller.uninstall(target)
+                    successful.add(target.installId)
+                    log(TAG, INFO) { "Successfully uninstalled $target" }
+                } catch (e: Exception) {
+                    log(TAG, ERROR) { "Failed to uninstall $targetId: ${e.asLog()}" }
+                    failed.add(targetId)
+                } finally {
+                    increaseProgress()
+                }
+            }
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        appScan.refresh()
+
+        internalData.value = snapshot.copy(
+            apps = run {
+                val affectedPkgs = successful.map { it.pkgId } + failed.map { it.pkgId }
+                val cleanedSnapshot = snapshot.apps.filterNot { affectedPkgs.contains(it.id) }
+                val updatedPkgs = affectedPkgs.map {
+                    appScan.app(
+                        pkgId = it,
+                        user = userManager.currentUser().handle,
+                        includeSize = snapshot.hasInfoSize,
+                        includeActive = snapshot.hasInfoActive,
+                        includeUsage = snapshot.hasInfoScreenTime
+                    )
+                }.flatten()
+                cleanedSnapshot + updatedPkgs
+            }
+        )
+
+        return UninstallTask.Result(successful, failed)
+    }
+
+    private suspend fun performExportSave(task: AppExportTask): AppExportTask.Result {
+        log(TAG) { "performExportSave(): $task" }
+        updateProgressPrimary { it.getString(mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_exporting_x, "...") }
+        updateProgressCount(Progress.Count.Counter(task.targets.size))
+
+        val snapshot = internalData.value ?: throw IllegalStateException("App data wasn't loaded")
+
+        val exporter = appExporterProvider.get()
+
+        val successful = mutableSetOf<AppExporter.Result>()
+        val failed = mutableSetOf<InstallId>()
+
+        task.targets.forEach { targetId ->
+            try {
+                // Inside the try: a target that a refresh or an uninstall removed from the snapshot is
+                // one failed export, not a reason to discard the exports that already succeeded.
+                val appInfo = snapshot.apps.single { it.installId == targetId }
+                updateProgressPrimary {
+                    it.getString(
+                        mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_exporting_x,
+                        appInfo.label.get(it),
+                    )
+                }
+
+                val result = exporter.withProgress(
+                    client = this,
+                    onUpdate = { existing, new -> existing?.copy(secondary = new?.primary ?: CaString.EMPTY) },
+                    onCompletion = { current -> current }
+                ) {
+                    exporter.save(appInfo, task.savePath)
+                }
+                successful.add(result)
+                log(TAG, INFO) { "Successfully exported $targetId to ${result.savePath}" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log(TAG, ERROR) { "Failed to export $targetId: ${e.asLog()}" }
+                failed.add(targetId)
+            } finally {
+                increaseProgress()
+            }
+        }
+
+        return AppExportTask.Result(
+            success = successful,
+            failed = failed,
+        )
+    }
+
+    private suspend fun performForceStop(task: ForceStopTask): ForceStopTask.Result {
+        log(TAG) { "performForceStop(): $task" }
+        val snapshot = internalData.value ?: throw IllegalStateException("App data wasn't loaded")
+
+        val successful = mutableSetOf<InstallId>()
+        val failed = mutableSetOf<InstallId>()
+
+        forceStopper.useRes {
+            forceStopper.withProgress(this) {
+                val mappedTargets = task.targets.map { id -> snapshot.apps.single { it.installId == id } }
+                val result = forceStop(mappedTargets, allowOffLimits = task.allowOffLimits)
+                successful.addAll(result.success)
+                failed.addAll(result.failed)
+            }
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        internalData.value = snapshot.copy(
+            apps = snapshot.apps.map { app ->
+                when {
+                    successful.contains(app.installId) || failed.contains(app.installId) -> {
+                        // TODO Do we need to update some info after force-stopping?
+                        app
+                    }
+
+                    else -> app
+                }
+            }
+        )
+
+        return ForceStopTask.Result(successful, failed)
+    }
+
+    private suspend fun performArchive(task: ArchiveTask): ArchiveTask.Result {
+        log(TAG) { "performArchive(): $task" }
+        updateProgressCount(Progress.Count.Counter(task.targets.size))
+
+        val snapshot = internalData.value ?: throw IllegalStateException("App data wasn't loaded")
+        val successful = mutableSetOf<InstallId>()
+        val failed = mutableSetOf<InstallId>()
+        val unavailable = mutableSetOf<InstallId>()
+        val budget = UnusableFailureBudget()
+        var gaveUp: AutomationCompatibilityException? = null
+
+        archiver.useRes {
+            for (targetId in task.targets) {
+                val target = snapshot.apps.single { it.installId == targetId }
+                updateProgressPrimary(target.label)
+                updateProgressSecondary(mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_archiving_app)
+
+                try {
+                    archiver.archive(target)
+                    successful.add(target.installId)
+                    log(TAG, INFO) { "Successfully archived $target" }
+                } catch (e: Exception) {
+                    log(TAG, ERROR) { "Failed to archive $targetId: ${e.asLog()}" }
+                    failed.add(targetId)
+                    // The archiver wraps whatever went wrong, classify the wrapped cause.
+                    val cause = if (e is ArchiveException) e.cause ?: e else e
+                    if (cause is ArchiveUnavailableException) unavailable.add(targetId)
+                    budget.onFailure(cause)
+                    if (budget.isExhausted) {
+                        log(TAG, ERROR) { "Automation failure budget spent at $targetId, giving up" }
+                        gaveUp = AutomationCompatibilityException(
+                            suggestAdbSetup = !rootManager.canUseRootNow() && !adbManager.canUseAdbNow(),
+                        )
+                        break
+                    }
+                } finally {
+                    increaseProgress()
+                }
+            }
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        // Runs even when we gave up, so the apps archived before that are reflected in the list.
+        val giveUpError = gaveUp
+        try {
+            appScan.refresh()
+
+            internalData.value = snapshot.copy(
+                apps = run {
+                    val affectedPkgs = successful.map { it.pkgId } + failed.map { it.pkgId }
+                    val cleanedSnapshot = snapshot.apps.filterNot { affectedPkgs.contains(it.id) }
+                    val updatedPkgs = affectedPkgs.map {
+                        appScan.app(
+                            pkgId = it,
+                            user = if (snapshot.hasIncludedMultiUser) null else userManager.currentUser().handle,
+                            includeSize = snapshot.hasInfoSize,
+                            includeActive = snapshot.hasInfoActive,
+                            includeUsage = snapshot.hasInfoScreenTime,
+                        )
+                    }.flatten()
+                    cleanedSnapshot + updatedPkgs
+                }
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (giveUpError == null) throw e
+            log(TAG, ERROR) { "Refresh failed after giving up on archiving: ${e.asLog()}" }
+            giveUpError.addSuppressed(e)
+        }
+
+        if (giveUpError != null) throw giveUpError
+
+        return ArchiveTask.Result(successful, failed, unavailable)
+    }
+
+    private suspend fun performRestore(task: RestoreTask): RestoreTask.Result {
+        log(TAG) { "performRestore(): $task" }
+        updateProgressCount(Progress.Count.Counter(task.targets.size))
+
+        val snapshot = internalData.value ?: throw IllegalStateException("App data wasn't loaded")
+        val successful = mutableSetOf<InstallId>()
+        val failed = mutableSetOf<InstallId>()
+        val unavailable = mutableSetOf<InstallId>()
+        val budget = UnusableFailureBudget()
+        var gaveUp: AutomationCompatibilityException? = null
+
+        restorer.useRes {
+            for (targetId in task.targets) {
+                val target = snapshot.apps.single { it.installId == targetId }
+                updateProgressPrimary(target.label)
+                updateProgressSecondary(mx.loperstack.tokkiphealth.appcontrol.R.string.appcontrol_progress_restoring_app)
+
+                try {
+                    restorer.restore(target)
+                    successful.add(target.installId)
+                    log(TAG, INFO) { "Successfully restored $target" }
+                } catch (e: Exception) {
+                    log(TAG, ERROR) { "Failed to restore $targetId: ${e.asLog()}" }
+                    failed.add(targetId)
+                    // The restorer wraps whatever went wrong, classify the wrapped cause.
+                    val cause = if (e is RestoreException) e.cause ?: e else e
+                    if (cause is RestoreUnavailableException) unavailable.add(targetId)
+                    budget.onFailure(cause)
+                    if (budget.isExhausted) {
+                        log(TAG, ERROR) { "Automation failure budget spent at $targetId, giving up" }
+                        gaveUp = AutomationCompatibilityException(
+                            suggestAdbSetup = !rootManager.canUseRootNow() && !adbManager.canUseAdbNow(),
+                        )
+                        break
+                    }
+                } finally {
+                    increaseProgress()
+                }
+            }
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_loading_app_data)
+        updateProgressSecondary(CaString.EMPTY)
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        // Runs even when we gave up, so the apps restored before that are reflected in the list.
+        val giveUpError = gaveUp
+        try {
+            appScan.refresh()
+
+            internalData.value = snapshot.copy(
+                apps = run {
+                    val affectedPkgs = successful.map { it.pkgId } + failed.map { it.pkgId }
+                    val cleanedSnapshot = snapshot.apps.filterNot { affectedPkgs.contains(it.id) }
+                    val updatedPkgs = affectedPkgs.map {
+                        appScan.app(
+                            pkgId = it,
+                            user = if (snapshot.hasIncludedMultiUser) null else userManager.currentUser().handle,
+                            includeSize = snapshot.hasInfoSize,
+                            includeActive = snapshot.hasInfoActive,
+                            includeUsage = snapshot.hasInfoScreenTime,
+                        )
+                    }.flatten()
+                    cleanedSnapshot + updatedPkgs
+                }
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (giveUpError == null) throw e
+            log(TAG, ERROR) { "Refresh failed after giving up on restoring: ${e.asLog()}" }
+            giveUpError.addSuppressed(e)
+        }
+
+        if (giveUpError != null) throw giveUpError
+
+        return RestoreTask.Result(successful, failed, unavailable)
+    }
+
+    data class State(
+        val data: Data?,
+        val progress: Progress.Data?,
+        val canToggle: Boolean,
+        val canForceStop: Boolean,
+        val canInfoSize: Boolean,
+        val canInfoActive: Boolean,
+        val canInfoScreenTime: Boolean,
+        val canIncludeMultiUser: Boolean,
+        val canArchive: Boolean,
+        val canRestore: Boolean,
+        val missingSetup: Set<SetupModule.Type> = emptySet(),
+    ) : SDMTool.State
+
+    data class Data(
+        val id: UUID = UUID.randomUUID(),
+        val apps: Collection<AppInfo>,
+        val hasInfoScreenTime: Boolean,
+        val hasInfoActive: Boolean,
+        val hasInfoSize: Boolean,
+        val hasIncludedMultiUser: Boolean,
+    )
+
+    @InstallIn(SingletonComponent::class)
+    @Module
+    abstract class DIM {
+        @Binds @IntoSet abstract fun mod(mod: AppControl): SDMTool
+    }
+
+    companion object {
+        var lastUninstalledPkg: Pkg.Id? = null
+            set(value) {
+                field = value
+                log(TAG) { "Updated lastUninstalledPkg to $value" }
+            }
+        private val TAG = logTag("AppControl")
+    }
+}

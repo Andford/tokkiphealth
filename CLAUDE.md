@@ -23,6 +23,20 @@ each tool; the plan and its progress are in `docs/PLAN.md`.
 - Copied from Tokkip PC by `npm run sync-tokkip` (don't edit here, change them there): `src/tokkip/*`, `src/core/{theme.ts,tokens.css,layout.ts,fonts.ts}`, `public/sounds/`.
 - `npm run icons` regenerates `src/ui/icons.ts` from Material Symbols.
 
+## Android (`android/`)
+Tokkip Health for Android (`mx.loperstack.tokkiphealth`): a fork of SD Maid SE
+(GPL-3.0, d4rken-org/sdmaid-se): **its engine, our face**. The tools' code stays
+SD Maid's; what people see is Tokkip's: name, colours (Material 3 from Tokkip's
+teal, Material You by default), Google Sans, Tokkip himself
+(`app-common-tokkip`, copied from Andford/tokkip `android/shared` — change him
+there) and Spanish. SD Maid's mascot, icons, animations, store texts and
+translations are excluded by its license: never bring them in; write our own
+Spanish in `res/values-es`. Kotlin packages stay `mx.loperstack.tokkiphealth.*`.
+Shizuku (and accessibility) for access on a Pixel without root. No MOTD, no
+billing; the update check only reads `android-v*` releases of this repo.
+Credit SD Maid SE in Acknowledgements and README. Build: `cd android && ./gradlew :app:assembleRelease`
+(CI: `.github/workflows/android.yml`). Fixes from SD Maid are brought over by hand.
+
 ## Rules
 - Keep the identifier `mx.loperstack.tokkiphealthypc`.
 - Look first, then touch: every tool reviews, lets you choose, then applies. Never delete while scanning. Files in use are skipped and counted, never forced. Links are never followed.

@@ -1,0 +1,96 @@
+package mx.loperstack.tokkiphealth.deduplicator.core.scanner
+
+import mx.loperstack.tokkiphealth.common.MimeTypeTool
+import mx.loperstack.tokkiphealth.common.MimeTypes
+import mx.loperstack.tokkiphealth.common.debug.Bugs
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APathLookup
+import mx.loperstack.tokkiphealth.common.files.extension
+import javax.inject.Inject
+
+class CommonFilesCheck @Inject constructor(
+    private val mimeTypeTool: MimeTypeTool,
+) {
+
+    suspend fun isCommon(lookup: APathLookup<*>): Boolean {
+        val mimeType = mimeTypeTool.determineMimeType(lookup)
+        return when {
+            mimeType == "application/octet-stream" -> APPS_SUFFIXES.contains(lookup.extension)
+            else -> COMMON_TYPES.contains(mimeType)
+        }
+    }
+
+    suspend fun isImage(lookup: APathLookup<*>): Boolean {
+        val mimeType = mimeTypeTool.determineMimeType(lookup)
+        if (Bugs.isDebug) log(TAG, VERBOSE) { "MimeType: $mimeType <- ${lookup.path}" }
+        return IMAGES.contains(mimeType)
+    }
+
+    companion object {
+        private val APPS_SUFFIXES = setOf(
+            "apk",
+            "apks"
+        )
+        private val APPS = setOf(
+            MimeTypes.Apk.value,
+        )
+        private val IMAGES = setOf(
+            "image/x-ms-bmp",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+            "image/svg+xml",
+        )
+
+        private val VIDEOS = setOf(
+            "video/mp4",
+            "video/webm",
+            "video/ogg",
+            "video/x-msvideo",
+            "video/mpeg",
+            "video/3gpp",
+            "video/quicktime",
+        )
+
+        private val AUDIO = setOf(
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/wav",
+            "audio/webm",
+            "audio/aac",
+            "audio/x-wav",
+            "audio/x-aiff",
+            "audio/flac",
+            "audio/mp4",
+            "audio/x-m4a",
+        )
+        private val ARCHIVES = setOf(
+            "application/zip",
+            "application/x-rar-compressed",
+            "application/x-tar",
+            "application/gzip",
+            "application/x-7z-compressed"
+        )
+
+        private val DOCUMENTS = setOf(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "text/plain",
+            "text/html",
+            "text/csv",
+            "text/rtf"
+        )
+        private val COMMON_TYPES = APPS + IMAGES + VIDEOS + AUDIO + ARCHIVES + DOCUMENTS
+        private val TAG = logTag("Deduplicator", "CommonFilesCheck")
+    }
+}

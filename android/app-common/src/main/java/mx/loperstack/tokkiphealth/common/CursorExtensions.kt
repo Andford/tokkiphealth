@@ -1,0 +1,15 @@
+package mx.loperstack.tokkiphealth.common
+
+import android.database.Cursor
+import java.io.Closeable
+
+fun <T : Closeable?> T.closeQuietly() {
+    try {
+        this?.close()
+    } catch (_: Exception) {
+    }
+}
+
+fun <T : Cursor> T.asSequence(): Sequence<T> {
+    return generateSequence { if (moveToNext()) this else null }
+}

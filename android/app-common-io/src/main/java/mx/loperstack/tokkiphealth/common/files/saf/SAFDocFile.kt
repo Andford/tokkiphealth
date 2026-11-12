@@ -1,0 +1,391 @@
+package mx.loperstack.tokkiphealth.common.files.saf
+
+import android.annotation.SuppressLint
+import android.content.ContentResolver
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.os.RemoteException
+import android.provider.DocumentsContract
+import android.system.Os
+import android.system.StructStat
+import android.text.TextUtils
+import androidx.core.net.toUri
+import mx.loperstack.tokkiphealth.common.asSequence
+import mx.loperstack.tokkiphealth.common.debug.Bugs
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.files.Ownership
+import mx.loperstack.tokkiphealth.common.files.Permissions
+import mx.loperstack.tokkiphealth.common.files.useQuietly
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
+import java.time.Instant
+
+
+data class SAFDocFile(
+    private val context: Context,
+    private val resolver: ContentResolver,
+    val uri: Uri
+) {
+
+    val name: String?
+        get() = queryForString(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+
+    val exists: Boolean
+        get() = queryForString(DocumentsContract.Document.COLUMN_DOCUMENT_ID) != null
+
+    /**
+     * Like [exists], but a failing query raises instead of reading as "does not exist".
+     *
+     * Only for verifying a mutation: a delete that returned false must not be reported as success
+     * just because the query that was supposed to prove it never got an answer.
+     *
+     * [ContentResolver.query] can't carry that distinction: it hands back a null cursor both for a
+     * document the provider says is gone and for a provider it never reached. So the provider is
+     * addressed through a client instead - no client means nobody to ask, and only a null cursor
+     * from a live one counts as "missing" (`DocumentsProvider.query` returns null after catching
+     * the [FileNotFoundException] from `queryDocument`).
+     */
+    @SuppressLint("Recycle")
+    fun existsStrict(): Boolean {
+        val client = resolver.acquireUnstableContentProviderClient(uri)
+            ?: throw IOException("provider unavailable for $uri")
+
+        return try {
+            client
+                .query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)
+                .useQuietly { c -> c != null && c.moveToFirst() && !c.isNull(0) }
+        } catch (e: RemoteException) {
+            throw IOException("existsStrict() failed for $uri", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Like [name], but a failing query raises instead of reading as "this document has no name".
+     *
+     * Only for checking a name we asked for: a `DocumentsProvider` may hand back a document under a
+     * different display name, and a query nobody answered must not pass as "the provider supplies no
+     * name" - that would let a mangled name through as if it were the one we requested.
+     *
+     * [queryForString] can't carry that distinction, it answers null for every one of those cases.
+     * So the provider is addressed through a client like in [existsStrict] - no client means nobody
+     * to ask - and null is returned only for a row whose `COLUMN_DISPLAY_NAME` really is null.
+     */
+    @SuppressLint("Recycle")
+    fun readDisplayNameStrict(): String? {
+        val client = resolver.acquireUnstableContentProviderClient(uri)
+            ?: throw IOException("provider unavailable for $uri")
+
+        return try {
+            client
+                .query(uri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+                .useQuietly { c ->
+                    if (c == null) throw IOException("No cursor for $uri")
+                    if (!c.moveToFirst()) throw IOException("No row for $uri")
+                    if (c.isNull(0)) null else c.getString(0)
+                }
+        } catch (e: RemoteException) {
+            throw IOException("readDisplayNameStrict() failed for $uri", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    private val mimeType: String? by lazy { queryForString(DocumentsContract.Document.COLUMN_MIME_TYPE) }
+
+    val isFile: Boolean
+        get() = DocumentsContract.Document.MIME_TYPE_DIR != (mimeType) && mimeType?.isNotEmpty() == true
+
+    val isDirectory: Boolean
+        get() = mimeType == DocumentsContract.Document.MIME_TYPE_DIR
+
+    val writable: Boolean
+        get() {
+            // Ignore if grant doesn't allow write
+            if (!hasPermission(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)) {
+                return false
+            }
+
+            val flags: Int = queryForLong(DocumentsContract.Document.COLUMN_FLAGS)?.toInt() ?: 0
+
+            // Ignore documents without MIME
+            if (TextUtils.isEmpty(mimeType)) return false
+
+            // Deletable documents considered writable
+            if (flags and DocumentsContract.Document.FLAG_SUPPORTS_DELETE != 0) {
+                return true
+            }
+
+            if (DocumentsContract.Document.MIME_TYPE_DIR == mimeType && flags and DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE != 0) {
+                // Directories that allow create considered writable
+                return true
+            } else if (!TextUtils.isEmpty(mimeType) && flags and DocumentsContract.Document.FLAG_SUPPORTS_WRITE != 0) {
+                // Writable normal files considered writable
+                return true
+            }
+
+            return false
+        }
+
+    val readable: Boolean
+        get() {
+            // Ignore if grant doesn't allow read
+            if (!hasPermission(Intent.FLAG_GRANT_READ_URI_PERMISSION)) return false
+
+            // Ignore documents without MIME
+            if (TextUtils.isEmpty(mimeType)) return false
+
+            return true
+        }
+
+    val lastModified: Instant
+        get() = Instant.ofEpochMilli(queryForLong(DocumentsContract.Document.COLUMN_LAST_MODIFIED) ?: 0)
+
+    val length: Long
+        get() = queryForLong(DocumentsContract.Document.COLUMN_SIZE) ?: 0
+
+    fun createDirectory(name: String): SAFDocFile {
+        return createFile(DocumentsContract.Document.MIME_TYPE_DIR, name)
+    }
+
+    fun createFile(mimeType: String, name: String): SAFDocFile {
+        val newFileUri = DocumentsContract.createDocument(resolver, uri, mimeType, name)
+        requireNotNull(newFileUri) { "createFile(mimeType=$mimeType, name=$name) failed for $uri" }
+        return SAFDocFile(context, resolver, newFileUri)
+    }
+
+    // https://commonsware.com/blog/2019/11/23/scoped-storage-stories-documentscontract.html
+    @SuppressLint("Recycle")
+    fun findFile(name: String): SAFDocFile? {
+        val childrenUri: Uri =
+            DocumentsContract.buildChildDocumentsUriUsingTree(uri, DocumentsContract.getDocumentId(uri))
+
+        val foundUris = resolver.query(
+            childrenUri,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            "${DocumentsContract.Document.COLUMN_DISPLAY_NAME}=?",
+            arrayOf(name),
+            null
+        )?.useQuietly { cursor ->
+            cursor.asSequence()
+                .map { Pair(it.getString(0), it.getString(1)) }
+                .toList()
+        }
+
+        requireNotNull(foundUris) { "Unable to query for $name in $uri" }
+
+        val pair = foundUris.singleOrNull { it.second == name } ?: return null
+
+        return SAFDocFile(context, resolver, DocumentsContract.buildDocumentUriUsingTree(uri, pair.first))
+    }
+
+    @SuppressLint("Recycle") fun listFiles(): List<SAFDocFile> {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, DocumentsContract.getDocumentId(uri))
+
+        val foundUris = resolver.query(
+            childrenUri,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+            null,
+            null,
+            null
+        )?.useQuietly { cursor ->
+            cursor.asSequence().map { DocumentsContract.buildDocumentUriUsingTree(uri, it.getString(0)) }.toList()
+        }
+
+        requireNotNull(foundUris) { "Unable to list files for $uri" }
+
+        return foundUris.map { SAFDocFile(context, resolver, it) }
+    }
+
+    /**
+     * The display names of this document's children, from a single child listing.
+     *
+     * For picking a name that is still free: [findFile] passes a SQL selection that providers like
+     * `ExternalStorageProvider` ignore, so probing N candidates would run N full directory listings,
+     * and a name two children share reads as "not found" there. Rows without a display name are
+     * skipped. Query failures propagate: "we couldn't ask" must not read as "the directory is empty".
+     */
+    @SuppressLint("Recycle")
+    fun listChildDisplayNames(): Set<String> {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, DocumentsContract.getDocumentId(uri))
+
+        val names = resolver.query(
+            childrenUri,
+            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.useQuietly { cursor ->
+            cursor.asSequence().mapNotNull { it.getString(0) }.toSet()
+        }
+
+        requireNotNull(names) { "Unable to list child names for $uri" }
+
+        return names
+    }
+
+    /**
+     * Whether this document has at least one child, answered by the child cursor alone.
+     *
+     * No per-child metadata is queried, so a child that vanishes while we ask can't turn the answer
+     * into an unrelated lookup failure. Query failures propagate: "we couldn't ask" must not read as
+     * "the directory is empty".
+     */
+    @SuppressLint("Recycle")
+    fun hasChildren(): Boolean {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, DocumentsContract.getDocumentId(uri))
+
+        val cursor = resolver.query(
+            childrenUri,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+            null,
+            null,
+            null
+        )
+
+        requireNotNull(cursor) { "Unable to list files for $uri" }
+
+        return cursor.useQuietly { it.moveToFirst() }
+    }
+
+    fun delete(dryRun: Boolean = Bugs.isDryRun): Boolean = try {
+        if (dryRun) {
+            log(SAFGateway.TAG, INFO) { "DRYRUN: Not deleting $uri" }
+            exists
+        } else {
+            DocumentsContract.deleteDocument(resolver, uri)
+        }
+    } catch (e: IllegalArgumentException) {
+        if (e.message?.contains(FileNotFoundException::class.simpleName!!) == true) false else throw e
+    }
+
+    fun setLastModified(lastModified: Instant): Boolean = try {
+        val updateValues = ContentValues()
+        updateValues.put(DocumentsContract.Document.COLUMN_LAST_MODIFIED, lastModified.toEpochMilli())
+        val updated: Int = resolver.update(uri, updateValues, null, null)
+        updated == 1
+    } catch (e: Exception) {
+        log(SAFGateway.TAG, WARN) {
+            "setLastModified(lastModified=$lastModified) failed on $this: ${e.asLog()}"
+        }
+        false
+    }
+
+    fun setPermissions(permissions: Permissions): Boolean = openPFD(resolver, FileMode.WRITE).use { pfd ->
+        try {
+            Os.fchmod(pfd.fileDescriptor, permissions.mode)
+            true
+        } catch (e: Exception) {
+            log(SAFGateway.TAG, WARN) { "setPermissions(permissions=$permissions) failed on $this: ${e.asLog()}" }
+            false
+        }
+    }
+
+    fun setOwnership(ownership: Ownership): Boolean = openPFD(resolver, FileMode.WRITE).use { pfd ->
+        try {
+            Os.fchown(pfd.fileDescriptor, ownership.userId.toInt(), ownership.groupId.toInt())
+            true
+        } catch (e: Exception) {
+            log(SAFGateway.TAG, WARN) { "setOwnership(ownership=$ownership) failed on $this: ${e.asLog()}" }
+            false
+        }
+    }
+
+    fun fstat(): StructStat? {
+        return try {
+            val pfd = openPFD(resolver, FileMode.READ)
+            pfd.use { Os.fstat(pfd.fileDescriptor) }
+        } catch (e: Exception) {
+            log(SAFGateway.TAG, WARN) { "Failed to fstat SAFPath: $this: ${e.asLog()}" }
+            null
+        }
+    }
+
+    fun openPFD(contentResolver: ContentResolver, mode: FileMode): ParcelFileDescriptor {
+        return contentResolver.openFileDescriptor(uri, mode.value) ?: throw IOException("Couldn't open $uri")
+    }
+
+    private fun hasPermission(
+        flag: Int
+    ): Boolean = context.checkCallingOrSelfUriPermission(uri, flag) == PackageManager.PERMISSION_GRANTED
+
+    @SuppressLint("Recycle")
+    private fun queryForString(column: String): String? {
+        return try {
+            resolver.query(uri, arrayOf(column), null, null, null).useQuietly { c ->
+                if (c != null && c.moveToFirst() && !c.isNull(0)) {
+                    c.getString(0)
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            if (Bugs.isTrace) {
+                log(SAFGateway.TAG + ":SAFDocFile", WARN) { "queryForString(column=$column): ${e.asLog()}" }
+            }
+            null
+        }
+    }
+
+    @SuppressLint("Recycle")
+    private fun queryForLong(column: String): Long? {
+        return try {
+            resolver.query(uri, arrayOf(column), null, null, null).useQuietly { c ->
+                if (c != null && c.moveToFirst() && !c.isNull(0)) {
+                    c.getLong(0)
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            log(SAFGateway.TAG + ":SAFDocFile", WARN) { "queryForLong(column=$column): ${e.asLog()}" }
+            null
+        }
+    }
+
+    override fun toString(): String {
+        return "SAFDocFile(uri=$uri)"
+    }
+
+    companion object {
+
+        fun buildTreeUri(baseUri: Uri, crumbs: List<String>): Uri {
+            val uriBuilder = StringBuilder().apply {
+                append(baseUri)
+                append("/document/")
+                append(Uri.encode(DocumentsContract.getTreeDocumentId(baseUri)))
+                if (crumbs.isNotEmpty() && !this.endsWith(Uri.encode(File.separator))) {
+                    append(Uri.encode(File.separator))
+                }
+                crumbs.forEachIndexed { index, crumb ->
+                    // By position, not by value: a later crumb may repeat the first one
+                    if (index != 0) append(Uri.encode(File.separator))
+                    append(Uri.encode(crumb))
+                }
+            }
+            return uriBuilder.toString().toUri()
+        }
+
+        fun fromTreeUri(context: Context, contentResolver: ContentResolver, treeUri: Uri): SAFDocFile {
+            val documentId = if (DocumentsContract.isDocumentUri(context, treeUri)) {
+                DocumentsContract.getDocumentId(treeUri)
+            } else {
+                DocumentsContract.getTreeDocumentId(treeUri)
+            }
+            return SAFDocFile(
+                context,
+                contentResolver,
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
+            )
+        }
+    }
+}

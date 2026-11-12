@@ -1,0 +1,387 @@
+package mx.loperstack.tokkiphealth.deduplicator.ui.list
+
+import dagger.hilt.android.lifecycle.HiltViewModel
+import mx.loperstack.tokkiphealth.common.WebpageTool
+import mx.loperstack.tokkiphealth.common.compose.snackbar.ToolListEvent
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.flow.SingleEventFlow
+import mx.loperstack.tokkiphealth.common.navigation.routes.UpgradeRoute
+import mx.loperstack.tokkiphealth.common.previews.PreviewOptions
+import mx.loperstack.tokkiphealth.common.previews.PreviewRoute
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.ui.LayoutMode
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.common.upgrade.UpgradeRepo
+import mx.loperstack.tokkiphealth.common.upgrade.isProForUi
+import mx.loperstack.tokkiphealth.deduplicator.core.Deduplicator
+import mx.loperstack.tokkiphealth.deduplicator.core.DeduplicatorSettings
+import mx.loperstack.tokkiphealth.deduplicator.core.Duplicate
+import mx.loperstack.tokkiphealth.deduplicator.core.hasData
+import mx.loperstack.tokkiphealth.deduplicator.core.tasks.DeduplicatorDeleteTask
+import mx.loperstack.tokkiphealth.deduplicator.core.tasks.DeduplicatorScanTask
+import mx.loperstack.tokkiphealth.deduplicator.core.tasks.DeduplicatorTask
+import mx.loperstack.tokkiphealth.deduplicator.core.tasks.isSingleDuplicateDelete
+import mx.loperstack.tokkiphealth.deduplicator.ui.DeduplicatorDetailsRoute
+import mx.loperstack.tokkiphealth.main.core.SDMTool
+import mx.loperstack.tokkiphealth.main.core.taskmanager.TaskSubmitter
+import mx.loperstack.tokkiphealth.main.core.taskmanager.getLatestTask
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import java.time.Instant
+import javax.inject.Inject
+
+@HiltViewModel
+class DeduplicatorListViewModel @Inject constructor(
+    dispatcherProvider: DispatcherProvider,
+    private val deduplicator: Deduplicator,
+    private val settings: DeduplicatorSettings,
+    private val taskSubmitter: TaskSubmitter,
+    private val upgradeRepo: UpgradeRepo,
+    private val webpageTool: WebpageTool,
+) : ViewModel4(dispatcherProvider = dispatcherProvider, tag = TAG) {
+
+    /** Set when the scan this screen started for itself failed, see the entry logic below. */
+    private val entryScanFailed = MutableStateFlow(false)
+
+    init {
+        // Start an initial scan if Deduplicator has no data yet. The Dashboard only navigates here
+        // after scanning, but the navigation back stack is saved-state backed while the tool's data
+        // is plain in-memory state: after process death the restored screen comes back with no data
+        // at all and would sit on the loading placeholder forever.
+        //
+        // Wait out any in-flight task before deciding: performScan nulls the data while it runs, so
+        // checking immediately would duplicate an expensive scan. We wait instead of bailing out
+        // because an incomplete task is no promise that data is coming — a task that completes
+        // without producing data would strand this screen on the loading placeholder for good.
+        launch {
+            while (true) {
+                val idleState = taskSubmitter.state.first { st ->
+                    st.tasks.none { it.toolType == SDMTool.Type.DEDUPLICATOR && !it.isComplete }
+                }
+                // A scan the user cancelled must not be restarted behind their back, and a failed one
+                // would most likely just fail again. Scans are started from the Dashboard, so that's
+                // where we send them. No completed entry at all is the process-death case: scan.
+                val latest = idleState.getLatestTask(SDMTool.Type.DEDUPLICATOR)
+                if (latest != null && (latest.cancelledAt != null || latest.error != null)) {
+                    navUp()
+                    return@launch
+                }
+                if (deduplicator.state.first().data != null) return@launch
+                // Atomic submit: between the idle check above and here another entry point (a second
+                // screen, the Dashboard) may have registered its own scan.
+                val submitted = try {
+                    taskSubmitter.submitIfToolIdle(DeduplicatorScanTask())
+                } catch (e: CancellationException) {
+                    // Rethrows if the ViewModel itself is going away, so teardown doesn't navigate.
+                    currentCoroutineContext().ensureActive()
+                    log(TAG, INFO) { "Entry scan was cancelled" }
+                    navUp()
+                    return@launch
+                } catch (e: Exception) {
+                    // No navUp here: the error dialog lives in this screen's host, so navigating
+                    // away would dispose it before it renders and the user would see nothing. No
+                    // rethrow either, that would emit the same error a second time through
+                    // launchErrorHandler. The failure flag turns the placeholder into an empty state.
+                    log(TAG, WARN) { "Entry scan failed: ${e.asLog()}" }
+                    entryScanFailed.value = true
+                    errorEvents.emit(e)
+                    return@launch
+                }
+                // Declined: another task for this tool registered in the race window. It may well
+                // complete without producing any data, so wait it out and decide again instead of
+                // leaving the screen loading forever.
+                if (submitted != null) return@launch
+            }
+        }
+        // navUp only on a real drain-to-empty. mapNotNull skips the null loading state, and
+        // distinctUntilChanged() drops the repeats: the tool's state combines data with progress, so
+        // the same Data re-emits on every progress tick and a cold empty scan would otherwise get
+        // past drop(1) on its second identical emission.
+        deduplicator.state
+            .mapNotNull { it.data }
+            .distinctUntilChanged()
+            .drop(1)
+            .filter { !it.hasData }
+            .take(1)
+            .onEach { navUp() }
+            .launchInViewModel()
+
+        val start = Instant.now()
+        val handledResults = mutableSetOf<String>()
+        taskSubmitter.state
+            .map { it.getLatestTask(SDMTool.Type.DEDUPLICATOR) }
+            .filterNotNull()
+            .filter { it.completedAt!! > start }
+            .onEach { task ->
+                val result = task.result as? DeduplicatorTask.Result ?: return@onEach
+                if (handledResults.add(task.id)) {
+                    if (task.task.isSingleDuplicateDelete) return@onEach
+                    events.tryEmit(Event.TaskResult(result))
+                }
+            }
+            .launchInViewModel()
+    }
+
+    val events = SingleEventFlow<Event>()
+
+    // Row production excludes progress so high-frequency progress ticks during a scan don't re-sort
+    // the clusters and recompute deleteTargetIds/freeableSizeOf per cluster. Progress, layout and
+    // allowDeleteAll are merged in the outer combine (below) as a cheap field swap that preserves the
+    // rows List instance, letting keyed lazy rows skip recomposition.
+    private val rowsFlow = combine(
+        deduplicator.state.map { it.data }.distinctUntilChanged(),
+        entryScanFailed,
+    ) { data, scanFailed ->
+        when {
+            data != null -> data.clusters
+                .sortedByDescending { it.averageSize }
+                .map { cluster ->
+                    val deleteTargetIds = cluster.deleteTargetIds
+                    DeduplicatorListRow(
+                        cluster = cluster,
+                        deleteTargetIds = deleteTargetIds,
+                        freeableSize = cluster.freeableSizeOf(deleteTargetIds),
+                    )
+                }
+            // Null rows mean "loading". Without data and without a scan that could still deliver
+            // it, that placeholder would never go away, so show the empty state instead.
+            scanFailed -> emptyList<DeduplicatorListRow>()
+            else -> null
+        }
+    }
+
+    val state: StateFlow<State?> = combine(
+        rowsFlow,
+        deduplicator.progress,
+        settings.layoutMode.flow,
+        settings.allowDeleteAll.flow,
+    ) { rows, progress, layoutMode, allowDeleteAll ->
+        // A null state is what the screen renders as loading, so rows stay null until there is
+        // either data or a failed entry scan.
+        rows?.let {
+            State(rows = it, progress = progress, layoutMode = layoutMode, allowDeleteAll = allowDeleteAll)
+        }
+    }.safeStateIn(
+        initialValue = null,
+        onError = { null },
+    )
+
+    data class DeduplicatorListRow(
+        val cluster: Duplicate.Cluster,
+        val deleteTargetIds: Set<Duplicate.Id>,
+        /** Bytes freed by deleting [deleteTargetIds] (the actual delete-target set, not the raw cluster size). */
+        val freeableSize: Long,
+    )
+
+    data class State(
+        val rows: List<DeduplicatorListRow>,
+        val progress: Progress.Data? = null,
+        val layoutMode: LayoutMode,
+        val allowDeleteAll: Boolean = false,
+    )
+
+    fun showDetails(id: Duplicate.Cluster.Id) {
+        log(TAG, INFO) { "showDetails(id=$id)" }
+        navTo(DeduplicatorDetailsRoute(identifier = id))
+    }
+
+    fun openPreview(options: PreviewOptions) {
+        log(TAG, INFO) { "openPreview(options=$options)" }
+        navTo(PreviewRoute(options = options))
+    }
+
+    fun previewCluster(cluster: Duplicate.Cluster) {
+        val paths = cluster.groups.flatMap { gr -> gr.duplicates.map { it.path } }
+        if (paths.isEmpty()) return
+        openPreview(PreviewOptions(paths = paths))
+    }
+
+    fun previewDuplicate(cluster: Duplicate.Cluster, dupe: Duplicate) {
+        val paths = cluster.groups.flatMap { gr -> gr.duplicates.map { it.path } }
+        if (paths.isEmpty()) return
+        openPreview(PreviewOptions(paths = paths, position = paths.indexOf(dupe.path)))
+    }
+
+    fun deleteClusters(clusters: Collection<Duplicate.Cluster>, confirmed: Boolean = false, deleteAll: Boolean = false) =
+        launch {
+            log(TAG, INFO) { "deleteClusters(${clusters.size}) confirmed=$confirmed deleteAll=$deleteAll" }
+
+            val sanitized = clusters.distinctBy { it.identifier }
+            if (sanitized.isEmpty()) return@launch
+
+            if (!confirmed) {
+                val targetsByCluster = sanitized.map { it to it.deleteTargetIds }
+                events.tryEmit(
+                    Event.ConfirmDeletion(
+                        clusters = sanitized,
+                        allowDeleteAll = settings.allowDeleteAll.value(),
+                        targetCount = targetsByCluster.sumOf { it.second.size },
+                        freeableSize = targetsByCluster.sumOf { (cluster, targets) -> cluster.freeableSizeOf(targets) },
+                    )
+                )
+                return@launch
+            }
+
+            if (!upgradeRepo.isProForUi()) {
+                navTo(UpgradeRoute())
+                return@launch
+            }
+
+            val mode = DeduplicatorDeleteTask.TargetMode.Clusters(
+                targets = sanitized.map { it.identifier }.toSet(),
+                deleteAll = deleteAll,
+            )
+            taskSubmitter.submit(DeduplicatorDeleteTask(mode = mode))
+        }
+
+    fun deleteDuplicate(cluster: Duplicate.Cluster, dupe: Duplicate, confirmed: Boolean = false) = launch {
+        log(TAG, INFO) { "deleteDuplicate(${dupe.identifier}) confirmed=$confirmed" }
+
+        if (!confirmed) {
+            events.tryEmit(
+                Event.ConfirmDupeDeletion(
+                    duplicates = listOf(dupe),
+                    detailsClusterId = cluster.identifier,
+                )
+            )
+            return@launch
+        }
+
+        if (!upgradeRepo.isProForUi()) {
+            navTo(UpgradeRoute())
+            return@launch
+        }
+
+        val mode = DeduplicatorDeleteTask.TargetMode.Duplicates(targets = setOf(dupe.identifier))
+        taskSubmitter.submit(DeduplicatorDeleteTask(mode = mode))
+    }
+
+    fun deleteDuplicates(ids: Set<Duplicate.Id>, confirmed: Boolean = false) = launch {
+        if (ids.isEmpty()) return@launch
+        log(TAG, INFO) { "deleteDuplicates(${ids.size}) confirmed=$confirmed" }
+
+        if (!confirmed) {
+            val data = deduplicator.state.first { it.data?.hasData == true }.data ?: return@launch
+            val matched = data.clusters.flatMap { cluster ->
+                cluster.groups
+                    .flatMap { it.duplicates }
+                    .filter { it.identifier in ids }
+                    .map { cluster.identifier to it }
+            }
+            if (matched.isEmpty()) return@launch
+            val involvedClusters = matched.map { it.first }.toSet()
+            events.tryEmit(
+                Event.ConfirmDupeDeletion(
+                    duplicates = matched.map { it.second },
+                    detailsClusterId = involvedClusters.singleOrNull(),
+                )
+            )
+            return@launch
+        }
+
+        if (!upgradeRepo.isProForUi()) {
+            navTo(UpgradeRoute())
+            return@launch
+        }
+
+        val mode = DeduplicatorDeleteTask.TargetMode.Duplicates(targets = ids)
+        taskSubmitter.submit(DeduplicatorDeleteTask(mode = mode))
+    }
+
+    fun excludeDuplicates(ids: Set<Duplicate.Id>) = launch {
+        if (ids.isEmpty()) return@launch
+        log(TAG, INFO) { "excludeDuplicates(${ids.size})" }
+        val data = deduplicator.state.first { it.data?.hasData == true }.data ?: return@launch
+        var totalPaths = 0
+        data.clusters.forEach { cluster ->
+            val paths = cluster.groups
+                .flatMap { it.duplicates }
+                .filter { it.identifier in ids }
+                .map { it.path }
+            if (paths.isEmpty()) return@forEach
+            deduplicator.exclude(cluster.identifier, paths)
+            totalPaths += paths.size
+        }
+        if (totalPaths > 0) events.tryEmit(Event.ExclusionsCreated(count = totalPaths))
+    }
+
+    fun excludeClusters(clusters: Collection<Duplicate.Cluster>) = launch {
+        log(TAG, INFO) { "excludeClusters(${clusters.size})" }
+        val sanitized = clusters.distinctBy { it.identifier }
+        if (sanitized.isEmpty()) return@launch
+        val undo = deduplicator.exclude(sanitized.map { it.identifier }.toSet())
+        events.tryEmit(Event.ExclusionsCreated(count = undo.exclusionIds.size))
+    }
+
+    /**
+     * Cluster-level exclusion for the selection-mode "exclude selected" action — matches legacy,
+     * which excluded whole clusters (and removed them from the list) rather than pruning individual
+     * duplicate paths (which leaves the cluster partially populated and still visible).
+     */
+    fun excludeClusterIds(clusterIds: Set<Duplicate.Cluster.Id>) = launch {
+        if (clusterIds.isEmpty()) return@launch
+        log(TAG, INFO) { "excludeClusterIds(${clusterIds.size})" }
+        val undo = deduplicator.exclude(clusterIds)
+        events.tryEmit(Event.ExclusionsCreated(count = undo.exclusionIds.size))
+    }
+
+    fun toggleLayoutMode() = launch {
+        log(TAG, INFO) { "toggleLayoutMode()" }
+        when (settings.layoutMode.value()) {
+            LayoutMode.LINEAR -> settings.layoutMode.value(LayoutMode.GRID)
+            LayoutMode.GRID -> settings.layoutMode.value(LayoutMode.LINEAR)
+        }
+    }
+
+    fun onHelpClick() {
+        webpageTool.open(HELP_URL)
+    }
+
+    sealed interface Event {
+        data class ConfirmDeletion(
+            val clusters: Collection<Duplicate.Cluster>,
+            val allowDeleteAll: Boolean,
+            /** Number of duplicate copies that will be deleted (keeper excluded). */
+            val targetCount: Int,
+            /** Bytes freed by the deletion (keeper excluded). */
+            val freeableSize: Long,
+        ) : Event
+
+        data class ConfirmDupeDeletion(
+            val duplicates: Collection<Duplicate>,
+            val detailsClusterId: Duplicate.Cluster.Id?,
+        ) : Event
+
+        data class TaskResult(override val result: DeduplicatorTask.Result) : Event, ToolListEvent.ShowTaskResult
+        data class ExclusionsCreated(override val count: Int) : Event, ToolListEvent.ShowExclusionsCreated
+    }
+
+    companion object {
+        private val TAG = logTag("Deduplicator", "List", "ViewModel")
+        private const val HELP_URL = "https://sdmse.darken.eu/deduplicator"
+    }
+}
+
+private fun Duplicate.Cluster.freeableSizeOf(targets: Set<Duplicate.Id>): Long = groups
+    .flatMap { it.duplicates }
+    .filter { it.identifier in targets }
+    .sumOf { it.size }

@@ -1,0 +1,17 @@
+package mx.loperstack.tokkiphealth.automation.core.specs
+
+import java.time.Duration
+
+sealed interface AutomationSpec {
+    val tag: String
+    interface Explorer : AutomationSpec {
+        val executionTimeout: Duration
+            get() = Duration.ofSeconds(30)
+
+        val executionRetryCount: Int
+            get() = 3
+
+        suspend fun createPlan(): suspend (AutomationExplorer.Context) -> Unit
+
+    }
+}

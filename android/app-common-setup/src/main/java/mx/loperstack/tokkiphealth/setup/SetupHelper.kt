@@ -1,0 +1,114 @@
+package mx.loperstack.tokkiphealth.setup
+
+import android.content.Context
+import dagger.Reusable
+import dagger.hilt.android.qualifiers.ApplicationContext
+import mx.loperstack.tokkiphealth.common.SystemSettingsProvider
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.permissions.Permission
+import mx.loperstack.tokkiphealth.common.pkgs.pkgops.PkgOps
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.root.canUseRootNow
+import mx.loperstack.tokkiphealth.common.user.UserManager2
+import mx.loperstack.tokkiphealth.common.user.ourInstall
+import javax.inject.Inject
+
+@Reusable
+class SetupHelper @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val adbManager: AdbManager,
+    private val rootManager: RootManager,
+    private val settingsProvider: SystemSettingsProvider,
+    private val pkgOps: PkgOps,
+    private val userManager2: UserManager2,
+) {
+
+    suspend fun checkGrantPermissions(): Boolean {
+        if (adbManager.canUseAdbNow()) {
+            log(TAG, VERBOSE) { "ensureGrantPermission() available via ADB" }
+            return true
+        }
+
+        if (rootManager.canUseRootNow()) {
+            log(TAG, VERBOSE) { "ensureGrantPermission() available via Root" }
+            return true
+        }
+
+        log(TAG, VERBOSE) { "ensureGrantPermission() is not available" }
+        return false
+    }
+
+    suspend fun hasSecureSettings(): Boolean = settingsProvider.hasSecureWriteAccess().also {
+        log(TAG, VERBOSE) { "hasSecureSettings(): $it" }
+    }
+
+    suspend fun setSecureSettings(granted: Boolean): Boolean {
+        log(TAG) { "setSecureSettings(granted=$granted)" }
+
+        if (granted == settingsProvider.hasSecureWriteAccess()) {
+            log(TAG, VERBOSE) { "setSecureSettings(granted=$granted): We already have desired access state" }
+            return true
+        }
+
+        if (!checkGrantPermissions()) {
+            log(TAG) { "setSecureSettings(granted=$granted): Can't gain grant permissions" }
+            return false
+        }
+
+        if (granted) {
+            pkgOps.grantPermission(userManager2.ourInstall(), Permission.WRITE_SECURE_SETTINGS)
+        } else {
+            pkgOps.revokePermission(userManager2.ourInstall(), Permission.WRITE_SECURE_SETTINGS)
+        }
+
+        if (granted == settingsProvider.hasSecureWriteAccess()) {
+            log(TAG, INFO) { "setSecureSettings(granted=$granted): We achieved desired access state :)" }
+        } else {
+            log(TAG, ERROR) { "setSecureSettings(granted=$granted): Failed to achieve desired access state :(" }
+        }
+
+        return true
+    }
+
+    suspend fun hasCrossUserAccess(): Boolean = Permission.INTERACT_ACROSS_USERS.isGranted(context).also {
+        log(TAG, VERBOSE) { "hasCrossUserAccess(): $it" }
+    }
+
+    suspend fun setCrossUserAccess(granted: Boolean): Boolean {
+        log(TAG) { "setCrossUserAccess(granted=$granted)" }
+
+        if (granted == hasCrossUserAccess()) {
+            log(TAG, VERBOSE) { "setCrossUserAccess(granted=$granted): We already have desired access state" }
+            return true
+        }
+
+        if (!checkGrantPermissions()) {
+            log(TAG) { "setCrossUserAccess(granted=$granted): Can't gain grant permissions" }
+            return false
+        }
+
+        if (granted) {
+            pkgOps.grantPermission(userManager2.ourInstall(), Permission.INTERACT_ACROSS_USERS)
+        } else {
+            pkgOps.revokePermission(userManager2.ourInstall(), Permission.INTERACT_ACROSS_USERS)
+        }
+
+        if (granted == hasCrossUserAccess()) {
+            log(TAG, INFO) { "setCrossUserAccess(granted=$granted): We achieved desired access state :)" }
+        } else {
+            log(TAG, ERROR) { "setCrossUserAccess(granted=$granted): Failed to achieve desired access state :(" }
+        }
+
+        return true
+    }
+
+    companion object {
+        private val TAG = logTag("Setup", "Healer", "Helper")
+    }
+}

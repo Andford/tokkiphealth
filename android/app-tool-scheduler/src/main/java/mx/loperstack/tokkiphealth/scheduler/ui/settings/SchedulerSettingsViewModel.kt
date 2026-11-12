@@ -1,0 +1,62 @@
+package mx.loperstack.tokkiphealth.scheduler.ui.settings
+
+import dagger.hilt.android.lifecycle.HiltViewModel
+import mx.loperstack.tokkiphealth.common.WebpageTool
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.flow.combine
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.scheduler.core.SchedulerSettings
+import kotlinx.coroutines.flow.StateFlow
+import javax.inject.Inject
+
+@HiltViewModel
+class SchedulerSettingsViewModel @Inject constructor(
+    dispatcherProvider: DispatcherProvider,
+    private val settings: SchedulerSettings,
+    private val webpageTool: WebpageTool,
+) : ViewModel4(dispatcherProvider = dispatcherProvider, tag = TAG) {
+
+    val state: StateFlow<State> = combine(
+        settings.skipWhenPowerSaving.flow,
+        settings.skipWhenNotCharging.flow,
+        settings.useAutomation.flow,
+    ) { skipPowerSave, skipNotCharging, useAuto ->
+        State(
+            skipWhenPowerSaving = skipPowerSave,
+            skipWhenNotCharging = skipNotCharging,
+            useAutomation = useAuto,
+        )
+    }.safeStateIn(
+        initialValue = State(),
+        onError = { State() },
+    )
+
+    fun setSkipWhenPowerSaving(value: Boolean) = launch {
+        settings.skipWhenPowerSaving.value(value)
+    }
+
+    fun setSkipWhenNotCharging(value: Boolean) = launch {
+        settings.skipWhenNotCharging.value(value)
+    }
+
+    fun setUseAutomation(value: Boolean) = launch {
+        settings.useAutomation.value(value)
+    }
+
+    fun onHelpClick() {
+        webpageTool.open(HELP_URL)
+    }
+
+    data class State(
+        val skipWhenPowerSaving: Boolean = true,
+        val skipWhenNotCharging: Boolean = false,
+        val useAutomation: Boolean = false,
+    )
+
+    companion object {
+        private val TAG = logTag("Scheduler", "Settings", "ViewModel")
+        private const val HELP_URL = "https://sdmse.darken.eu/scheduler#additional-options"
+    }
+}

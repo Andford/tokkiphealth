@@ -1,0 +1,149 @@
+package mx.loperstack.tokkiphealth.main.core
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
+import mx.loperstack.tokkiphealth.common.BuildConfigWrap
+import mx.loperstack.tokkiphealth.common.datastore.createValue
+import mx.loperstack.tokkiphealth.common.debug.DebugSettings
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.ERROR
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.device.RomType
+import mx.loperstack.tokkiphealth.common.theming.ThemeColor
+import mx.loperstack.tokkiphealth.common.theming.ThemeMode
+import mx.loperstack.tokkiphealth.common.theming.ThemeState
+import mx.loperstack.tokkiphealth.common.theming.ThemeStyle
+import mx.loperstack.tokkiphealth.common.updater.UpdateChecker
+import mx.loperstack.tokkiphealth.main.core.motd.MotdSettings
+import mx.loperstack.tokkiphealth.main.core.tour.TourPreferences
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class GeneralSettings @Inject constructor(
+    @ApplicationContext private val context: Context,
+    debugSettings: DebugSettings,
+    json: Json,
+    motdSettings: MotdSettings,
+    updateChecker: UpdateChecker
+) {
+
+    private val Context.dataStore by preferencesDataStore(name = "settings_core")
+
+    val dataStore: DataStore<Preferences>
+        get() = context.dataStore
+
+    val themeMode = dataStore.createValue("core.ui.theme.mode", ThemeMode.SYSTEM, json)
+    val themeStyle = dataStore.createValue("core.ui.theme.style", ThemeStyle.MATERIAL_YOU, json)
+    val themeColor = dataStore.createValue(
+        key = "core.ui.theme.color",
+        defaultValue = ThemeColor.GREEN,
+        json = json,
+        // Matches sibling apps: release builds silently fall back to GREEN when a stored
+        // palette value can't be decoded (e.g. a color was removed in a later version);
+        // debug builds throw so we notice the data drift during development.
+        fallbackToDefault = BuildConfigWrap.BUILD_TYPE == BuildConfigWrap.BuildType.RELEASE,
+    )
+
+    val usePreviews = dataStore.createValue("core.ui.previews.enabled", true)
+
+    val isOnboardingCompleted = dataStore.createValue("core.onboarding.completed", false)
+
+    val hasAcsConsent = dataStore.createValue("core.acs.consent", null as Boolean?)
+
+    val isSetupDismissed = dataStore.createValue("core.setup.dismissed", false)
+
+    val hasPassedAppOpsRestrictions = dataStore.createValue("core.appops.restrictions.passed", false)
+    val hasTriggeredRestrictions = dataStore.createValue("core.appops.restrictions.triggered", false)
+
+    val enableDashboardOneClick = dataStore.createValue("dashboard.oneclick.onepass.enabled", false)
+    val oneClickCorpseFinderEnabled = dataStore.createValue("dashboard.oneclick.corpsefinder.enabled", true)
+    val oneClickSystemCleanerEnabled = dataStore.createValue("dashboard.oneclick.systemcleaner.enabled", true)
+    val oneClickAppCleanerEnabled = dataStore.createValue("dashboard.oneclick.appcleaner.enabled", true)
+    val oneClickDeduplicatorEnabled = dataStore.createValue("dashboard.oneclick.deduplicator.enabled", false)
+    val shortcutOneClickEnabled = dataStore.createValue("shortcut.oneclick.enabled", false)
+
+    // Whether the dashboard summary (hero) card may open by itself as the outcome of a one-tap main
+    // action. When off the card never auto-opens; the bar's compact size chip stays the indicator and
+    // one tap on it still opens the card.
+    val dashboardHeroAutoShow = dataStore.createValue("dashboard.hero.autoshow.enabled", true)
+
+    // Home-screen widget "Clean" one-tap consent. The widget's Clean button never scan+deletes
+    // without opt-in: [widgetOneClickEnabled] must be on. [widgetOneClickConsentAsked] records
+    // that the one-time in-app consent prompt has been shown (so it never reappears), regardless
+    // of the user's answer or a later manual toggle.
+    val widgetOneClickEnabled = dataStore.createValue("widget.oneclick.enabled", false)
+    val widgetOneClickConsentAsked = dataStore.createValue("widget.oneclick.consent.asked", false)
+
+    val isUpdateCheckEnabled = dataStore.createValue("updater.check.enabled", updateChecker.isEnabledByDefault())
+
+    val romTypeDetection = dataStore.createValue("core.romtype.detection", RomType.AUTO, json)
+
+    val anniversaryDismissedOrdinal = dataStore.createValue<Int?>(KEY_ANNIVERSARY_DISMISSED_ORDINAL, null)
+
+    val dashboardCardConfig = dataStore.createValue(
+        key = "dashboard.cards.config",
+        defaultValue = DashboardCardConfig(),
+        json = json,
+        fallbackToDefault = true,
+    )
+
+    val tourPreferences = dataStore.createValue(
+        key = "core.tours.preferences",
+        defaultValue = TourPreferences(),
+        json = json,
+        fallbackToDefault = true,
+    )
+
+    // Global master switch for guided tours. When false, no tour starts (see GuidedTourController.shouldStart).
+    // Offered as an opt-out during onboarding and from a tour's exit dialog ("Disable all tours");
+    // re-enabled by "Reset guided tours" in settings.
+    val isGuidedToursEnabled = dataStore.createValue("core.tours.enabled", true)
+
+    // Unused at the moment, but we keep this to remember the setting should we add this again in the future
+    @Suppress("unused")
+    val isBugReporterEnabled = dataStore.createValue(
+        "core.bugreporter.enabled",
+        BuildConfigWrap.FLAVOR == BuildConfigWrap.Flavor.GPLAY
+    )
+
+    companion object {
+        internal val TAG = logTag("Core", "Settings")
+
+        const val KEY_ANNIVERSARY_DISMISSED_ORDINAL = "core.anniversary.dismissed.ordinal"
+    }
+}
+
+val GeneralSettings.themeState: Flow<ThemeState>
+    get() = combine(
+        themeMode.flow,
+        themeStyle.flow,
+        themeColor.flow,
+    ) { mode, style, color -> ThemeState(mode = mode, style = style, color = color) }
+
+/**
+ * Read once, blocking, for callers that must have a theme before they render anything.
+ * See [themeState] for the reactive form.
+ *
+ * Decoding is allowed to fail here: themeMode and themeStyle have no decode fallback, and this
+ * runs before the first frame, so a restored-backup or older-schema value would crash the launch.
+ */
+val GeneralSettings.themeStateBlocking: ThemeState
+    get() = try {
+        runBlocking { themeState.first() }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log(GeneralSettings.TAG, ERROR) { "Failed to read theme, using defaults: ${e.asLog()}" }
+        ThemeState()
+    }

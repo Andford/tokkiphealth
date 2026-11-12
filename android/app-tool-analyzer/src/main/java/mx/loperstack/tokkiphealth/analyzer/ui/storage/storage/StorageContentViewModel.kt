@@ -1,0 +1,232 @@
+package mx.loperstack.tokkiphealth.analyzer.ui.storage.storage
+
+import dagger.hilt.android.lifecycle.HiltViewModel
+import mx.loperstack.tokkiphealth.analyzer.core.Analyzer
+import mx.loperstack.tokkiphealth.analyzer.core.device.DeviceStorage
+import mx.loperstack.tokkiphealth.analyzer.core.storage.StorageScanTask
+import mx.loperstack.tokkiphealth.analyzer.core.storage.SystemDeepScanTask
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.AppCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.MediaCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.OtherUsersCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.SystemCategory
+import mx.loperstack.tokkiphealth.analyzer.ui.AppsRoute
+import mx.loperstack.tokkiphealth.analyzer.ui.ContentRoute
+import mx.loperstack.tokkiphealth.analyzer.ui.StorageContentRoute
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.navigation.routes.DashboardRoute
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.storage.StorageId
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.main.core.SDMTool
+import mx.loperstack.tokkiphealth.main.core.taskmanager.TaskSubmitter
+import mx.loperstack.tokkiphealth.setup.SetupRoute
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import javax.inject.Inject
+
+@HiltViewModel
+class StorageContentViewModel @Inject constructor(
+    dispatcherProvider: DispatcherProvider,
+    private val analyzer: Analyzer,
+    private val taskSubmitter: TaskSubmitter,
+) : ViewModel4(dispatcherProvider, tag = TAG) {
+
+    private val routeFlow = MutableStateFlow<StorageContentRoute?>(null)
+
+    fun bindRoute(route: StorageContentRoute) {
+        if (routeFlow.value != null) return
+        log(TAG, INFO) { "bindRoute(${route.storageId})" }
+        routeFlow.value = route
+    }
+
+    init {
+        // Auto-scan on first arrival when no categories exist for this storage.
+        routeFlow
+            .filterNotNull()
+            .take(1)
+            .flatMapLatest { route ->
+                analyzer.data
+                    .filter { it.categories[route.storageId].isNullOrEmpty() }
+                    .take(1)
+                    .onEach { taskSubmitter.submit(StorageScanTask(route.storageId)) }
+                    .catch {
+                        log(TAG, WARN) { "Storage unavailable ${route.storageId}: ${it.asLog()}" }
+                        navTo(DashboardRoute)
+                    }
+            }
+            .launchInViewModel()
+    }
+
+    val state: StateFlow<State> = routeFlow
+        .filterNotNull()
+        .flatMapLatest { route ->
+            val targetStorageId: StorageId = route.storageId
+            // Row production excludes progress so progress ticks during a scan don't rebuild the
+            // category rows. Progress is merged in the outer combine (below) as a cheap field swap
+            // that preserves the rows List instance.
+            val content = analyzer.data.map { data ->
+                val storage = data.storages.firstOrNull { it.id == targetStorageId }
+                if (storage == null) {
+                    State.NotFound
+                } else {
+                    val categories = data.categories[targetStorageId]
+                    // Other users are only fully measured with root. Whatever we couldn't measure
+                    // stays inside the system residual, so the system card has to say so.
+                    val hidesOtherUsers = categories
+                        ?.filterIsInstance<OtherUsersCategory>()
+                        ?.any { category ->
+                            category.users.any { !it.appDataKnown || !it.sharedMediaKnown }
+                        }
+                        ?: false
+                    val rows: List<Row>? = categories
+                        ?.sortedBy {
+                            when (it) {
+                                is AppCategory -> 1
+                                is MediaCategory -> 2
+                                is SystemCategory -> 3
+                                is OtherUsersCategory -> 4
+                            }
+                        }
+                        ?.map { content ->
+                            when (content) {
+                                is AppCategory -> Row.Apps(storage = storage, category = content)
+                                is MediaCategory -> Row.Media(storage = storage, category = content)
+                                is SystemCategory -> Row.System(
+                                    storage = storage,
+                                    category = content,
+                                    hidesOtherUsers = hidesOtherUsers,
+                                )
+                                is OtherUsersCategory -> Row.OtherUsers(storage = storage, category = content)
+                            }
+                        }
+                    State.Ready(
+                        storage = storage,
+                        rows = rows,
+                        progress = null,
+                    )
+                }
+            }
+
+            combine(content, analyzer.progress) { base, progress ->
+                if (base is State.Ready) base.copy(progress = progress) else base
+            }
+        }
+        .safeStateIn(initialValue = State.Loading, onError = { State.NotFound })
+
+    fun refresh() = launch {
+        log(TAG) { "refresh()" }
+        val storageId = routeFlow.value?.storageId ?: return@launch
+        taskSubmitter.submit(StorageScanTask(target = storageId))
+    }
+
+    fun onNavigateBack() = launch {
+        log(TAG) { "onNavigateBack()" }
+        val activeAnalyzerTasks = taskSubmitter.state.first().tasks
+            .filter { it.toolType == SDMTool.Type.ANALYZER }
+            .any { it.isActive }
+        if (activeAnalyzerTasks) {
+            log(TAG) { "Canceling active tasks" }
+            taskSubmitter.cancel(SDMTool.Type.ANALYZER)
+        } else {
+            navUp()
+        }
+    }
+
+    /**
+     * Auto-exit when the target storage is gone (State.NotFound). Always navigates up — unlike
+     * [onNavigateBack], which keeps the user on-screen to cancel an in-flight scan. Cancelling a
+     * scan never restores a missing storage, so staying would strand the user on a blank screen.
+     */
+    fun exitOnNotFound() = launch {
+        log(TAG) { "exitOnNotFound()" }
+        taskSubmitter.cancel(SDMTool.Type.ANALYZER)
+        navUp()
+    }
+
+    fun onCategoryClick(row: Row) = launch {
+        val storageId = routeFlow.value?.storageId ?: return@launch
+        when (row) {
+            is Row.Apps -> {
+                if (row.category.setupIncomplete) {
+                    navTo(SetupRoute())
+                } else {
+                    navTo(AppsRoute(storageId = storageId))
+                }
+            }
+            is Row.Media -> {
+                val groupId = row.category.groups.singleOrNull()?.id
+                if (groupId == null) {
+                    log(TAG, WARN) { "Media category has 0 or >1 groups, ignoring click" }
+                    return@launch
+                }
+                navTo(ContentRoute(storageId = storageId, groupId = groupId, installId = null))
+            }
+            is Row.System -> {
+                if (!row.category.isBrowsable) return@launch
+                val groupId = row.category.groups.singleOrNull()?.id ?: return@launch
+                val activeProgress = (state.value as? State.Ready)?.progress
+                navTo(ContentRoute(storageId = storageId, groupId = groupId, installId = null))
+                if (!row.category.isDeepScanned && activeProgress == null) {
+                    launch { taskSubmitter.submit(SystemDeepScanTask(storageId)) }
+                }
+            }
+            // The card holds one group per user, so a whole-card click can't pick one.
+            // Navigation happens per user row, see onUserClick.
+            is Row.OtherUsers -> Unit
+        }
+    }
+
+    fun onUserClick(user: OtherUsersCategory.UserEntry) = launch {
+        log(TAG) { "onUserClick(${user.handle})" }
+        val storageId = routeFlow.value?.storageId ?: return@launch
+        if (!user.isBrowsable) {
+            log(TAG) { "User ${user.handle} is not browsable, ignoring click" }
+            return@launch
+        }
+        navTo(ContentRoute(storageId = storageId, groupId = user.groupId, installId = null))
+    }
+
+    sealed interface Row {
+        val storage: DeviceStorage
+        data class Apps(override val storage: DeviceStorage, val category: AppCategory) : Row
+        data class Media(override val storage: DeviceStorage, val category: MediaCategory) : Row
+        /**
+         * [hidesOtherUsers] is true when another user's storage on this device could not be fully
+         * measured. Their unmeasured bytes end up in the system residual, so the card says so.
+         */
+        data class System(
+            override val storage: DeviceStorage,
+            val category: SystemCategory,
+            val hidesOtherUsers: Boolean = false,
+        ) : Row
+        data class OtherUsers(override val storage: DeviceStorage, val category: OtherUsersCategory) : Row
+    }
+
+    sealed interface State {
+        data object Loading : State
+        data class Ready(
+            val storage: DeviceStorage,
+            val rows: List<Row>?,
+            val progress: Progress.Data?,
+        ) : State
+        data object NotFound : State
+    }
+
+    companion object {
+        private val TAG = logTag("Analyzer", "Storage", "Content", "ViewModel")
+    }
+}

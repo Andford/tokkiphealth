@@ -1,0 +1,40 @@
+package mx.loperstack.tokkiphealth.stats.core
+
+import android.content.Context
+import androidx.hilt.work.HiltWorker
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.stats.core.db.ReportsDatabase
+import mx.loperstack.tokkiphealth.widget.WidgetUpdater
+
+@HiltWorker
+class SpaceMonitorWorker @AssistedInject constructor(
+    @Assisted private val context: Context,
+    @Assisted private val params: WorkerParameters,
+    private val spaceTracker: SpaceTracker,
+    private val widgetUpdater: WidgetUpdater,
+    private val lowSpaceMonitor: LowSpaceMonitor,
+    private val reportsDatabase: ReportsDatabase,
+) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        log(TAG, VERBOSE) { "doWork(): Recording storage snapshot" }
+        spaceTracker.recordSnapshot()
+        reportsDatabase.applyRetention()
+        // Backstop refresh for placed home-screen widgets (free space may drift between cleans).
+        widgetUpdater.updateAll()
+        // Never throws: a notification failure must not break snapshot recording or the widget.
+        lowSpaceMonitor.check()
+        log(TAG, VERBOSE) { "doWork(): Done" }
+        return Result.success()
+    }
+
+    companion object {
+        val TAG = logTag("Stats", "SpaceMonitor", "Worker")
+    }
+}

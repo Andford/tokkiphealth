@@ -1,0 +1,30 @@
+package mx.loperstack.tokkiphealth.common
+
+import android.widget.CompoundButton
+import android.widget.CompoundButton.OnCheckedChangeListener
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.reflection.getField
+
+fun CompoundButton.setChecked2(checked: Boolean, animate: Boolean = true) {
+    val currentListener = getOnCheckedChangeListener()
+    if (currentListener != null) setOnCheckedChangeListener(null)
+
+    isChecked = checked
+    if (!animate) jumpDrawablesToCurrentState()
+
+    if (currentListener != null) setOnCheckedChangeListener(currentListener)
+}
+
+fun CompoundButton.getOnCheckedChangeListener(): OnCheckedChangeListener? = try {
+    val field = CompoundButton::class.getField("mOnCheckedChangeListener")
+    field.get(this) as? OnCheckedChangeListener
+} catch (e: Exception) {
+    log(TAG, WARN) { "Failed to access CompoundButton.mOnCheckedChangeListener: ${e.asLog()}" }
+    null
+}
+
+
+private val TAG = logTag("Button", "Extensions")

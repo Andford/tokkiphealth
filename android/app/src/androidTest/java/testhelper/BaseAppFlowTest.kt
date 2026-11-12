@@ -1,0 +1,248 @@
+package testhelper
+
+import android.app.UiAutomation
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import java.io.ByteArrayOutputStream
+import androidx.annotation.StringRes
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isOff
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.lifecycle.Lifecycle
+import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Configurator
+import androidx.test.uiautomator.UiDevice
+import mx.loperstack.tokkiphealth.R
+import mx.loperstack.tokkiphealth.common.BuildConfigWrap
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import org.junit.Rule
+
+abstract class BaseAppFlowTest : BaseUITest() {
+
+    @get:Rule val composeRule = createEmptyComposeRule()
+
+    private val startedAt = System.currentTimeMillis()
+
+    protected fun str(@StringRes id: Int): String =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+
+    /**
+     * Runs as the shell uid. Revoking a runtime permission or `MANAGE_EXTERNAL_STORAGE` kills the app process,
+     * and with it this test. A default `UiAutomation` connection would suppress SD Maid's accessibility service.
+     */
+    protected fun shell(command: String): String {
+        val pfd = InstrumentationRegistry.getInstrumentation()
+            .getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+            .executeShellCommand(command)
+        return ParcelFileDescriptor.AutoCloseInputStream(pfd).bufferedReader().use { it.readText() }
+    }
+
+    /** For system screens outside the app. Connects with the same flags as [shell]. */
+    protected val device: UiDevice by lazy {
+        Configurator.getInstance().uiAutomationFlags = UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).apply {
+            registerWatcher("system ANR") { closeSystemAnrDialog() }
+        }
+    }
+
+    /**
+     * A launcher or System UI ANR dialog hides every other window from UI Automator, and can stay after the process
+     * recovers. Closing it kills and restarts that process. An ANR in any other process, SD Maid included, is left
+     * on screen to fail the test. Counterpart: SdmApp.closeSystemAnrDialog in app-e2e.
+     */
+    private fun closeSystemAnrDialog(): Boolean {
+        val close = device.findObjects(By.res("android", "aerr_close")).singleOrNull() ?: return false
+        // The dump opens with the state saved at the last ANR; the live focus line comes after it.
+        val victim = shell("dumpsys window").lineSequence()
+            .lastOrNull { it.contains("mCurrentFocus=") }
+            ?.let { ANR_WINDOW.find(it)?.groupValues?.get(1) }
+        if (victim !in RECOVERABLE_ANR_PROCESSES) return false
+        log(TAG, WARN) { "Closing ANR dialog of $victim.\n${anrDiagnostics()}" }
+        close.click()
+        return true
+    }
+
+    private fun anrDiagnostics(): String = runCatching {
+        val hidden = shell("settings get global hide_error_dialogs").trim()
+        val background = shell("settings get secure anr_show_background").trim()
+        val anrs = shell("logcat -b events -d -v threadtime am_anr:I *:S").ifBlank { "none logged" }
+        "hide_error_dialogs=$hidden anr_show_background=$background\n" +
+            "ANRs in the events log (last $ANR_MAX_CHARS chars):\n${anrs.takeLast(ANR_MAX_CHARS)}"
+    }.getOrElse { "ANR diagnostics unavailable: $it" }
+
+    /**
+     * For waits on state outside the semantics tree, e.g. lifecycle, files or system services. A timeout fails
+     * through [failWithScreen], so the assertion carries the screen and system state.
+     */
+    protected fun pollUntil(
+        description: String,
+        failureContext: (() -> String)? = null,
+        condition: () -> Boolean,
+    ) {
+        try {
+            composeRule.waitUntil(description, TIMEOUT_MS, condition)
+        } catch (_: ComposeTimeoutException) {
+            failWithScreen("Timed out: $description", failureContext)
+        }
+    }
+
+    /** Keeps failure context in the assertion as well as the separately uploaded logcat. */
+    protected fun failWithScreen(message: String, failureContext: (() -> String)? = null): Nothing {
+        fun capture(read: () -> String): String = runCatching(read).getOrElse { "unavailable: $it" }
+
+        val context = failureContext?.let { capture(it).take(STATE_MAX_CHARS) }
+        val hierarchy = capture {
+            ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }.toString()
+        }
+        val activity = capture {
+            shell("dumpsys activity activities").lineSequence()
+                .filter { it.contains("ResumedActivity", ignoreCase = true) }
+                .joinToString("\n").ifBlank { "No resumed activity reported" }
+        }.take(STATE_MAX_CHARS)
+        val window = capture {
+            shell("dumpsys window").lineSequence()
+                .filter { it.contains("mCurrentFocus") || it.contains("mFocusedApp") || it.contains("mFocusedWindow") }
+                .joinToString("\n").ifBlank { "No focused window reported" }
+        }.take(STATE_MAX_CHARS)
+        val events = capture {
+            val since = "${startedAt / 1000}.${(startedAt % 1000).toString().padStart(3, '0')}"
+            shell("logcat -b events -d -v threadtime -T $since am_anr:I am_crash:I am_kill:I am_proc_died:I wm_finish_activity:I wm_set_resumed_activity:I *:S")
+                .ifBlank { "No matching events recorded" }
+        }.takeLast(EVENTS_MAX_CHARS)
+        runCatching {
+            log(TAG, WARN) { "Screen at failure ($message):" }
+            hierarchy.lines().forEach { line -> line.chunked(1000).forEach { log(TAG, WARN) { it } } }
+        }
+        throw AssertionError(
+            buildString {
+                appendLine(message)
+                if (context != null) appendLine(context)
+                appendLine("Resumed activity:\n$activity")
+                appendLine("Focused window:\n$window")
+                appendLine("System events since test start (last $EVENTS_MAX_CHARS chars):\n$events")
+                appendLine(anrDiagnostics())
+                append("Window hierarchy:\n${hierarchy.take(HIERARCHY_MAX_CHARS)}")
+            },
+        )
+    }
+
+    /** Walks a fresh install from the welcome screen into the onboarding Setup screen. */
+    protected fun walkOnboarding() {
+        awaitNode(hasText(str(R.string.onboarding_welcome_title)))
+        composeRule.onNodeWithText(str(R.string.onboarding_welcome_continue_action)).performClick()
+
+        val versus = hasText(str(R.string.onboarding_versus_title))
+        val privacy = hasText(str(R.string.onboarding_privacy_title))
+        awaitNode(versus or privacy)
+        awaitGone(hasText(str(R.string.onboarding_welcome_title)))
+        if (composeRule.onAllNodes(versus).fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithText(str(R.string.onboarding_versus_continue_action)).performClick()
+            awaitNode(privacy)
+            awaitGone(versus)
+        }
+        // Disable MOTD and update checks before entering the dashboard.
+        switchOff(R.string.motd_setting_enabled_label)
+        if (BuildConfigWrap.FLAVOR == BuildConfigWrap.Flavor.FOSS) {
+            switchOff(R.string.updatecheck_setting_enabled_label)
+        }
+        composeRule.onNodeWithText(str(R.string.onboarding_welcome_continue_action)).performClick()
+
+        awaitNode(hasText(str(R.string.onboarding_setup_continue_action)))
+        awaitGone(hasText(str(R.string.onboarding_privacy_title)))
+        // Keep guided tours out of the flow under test.
+        switchOff(R.string.onboarding_setup_tours_enabled_label)
+        composeRule.onNodeWithText(str(R.string.onboarding_setup_continue_action)).performClick()
+        awaitGone(hasText(str(R.string.onboarding_setup_continue_action)))
+    }
+
+    /** Pauses and resumes the activity, delivering ON_RESUME. */
+    protected fun ActivityScenario<*>.cycleResume() {
+        moveToState(Lifecycle.State.STARTED)
+        moveToState(Lifecycle.State.RESUMED)
+    }
+
+    /**
+     * Returns from a system screen. On CI's API 36 image a single back press from Settings was lost while Settings
+     * refreshed; a press landing after the app resumed would leave the app's screen, so a retry can't turn a failure
+     * green.
+     */
+    protected fun ActivityScenario<*>.pressBackUntilResumed() = pollUntil(
+        "activity resumed",
+        failureContext = { "ActivityScenario.state=$state" },
+    ) {
+        // An ANR dialog takes the back presses. UiAutomator 2.4.0 runs watchers only from a lookup that finds nothing,
+        // and there is none here.
+        device.runWatchers()
+        if (state != Lifecycle.State.RESUMED) {
+            shell("input keyevent KEYCODE_BACK")
+            SystemClock.sleep(3000)
+        }
+        state == Lifecycle.State.RESUMED
+    }
+
+    protected fun switchOff(@StringRes label: Int) {
+        val row = hasText(str(label)) and isToggleable()
+        awaitNode(row)
+        composeRule.onNode(row).performScrollTo().performClick()
+        awaitNode(row and isOff())
+    }
+
+    /** Waits for an item of the screen's lazy list, scrolling to it; off-screen items are not in the tree. */
+    protected fun awaitListItem(matcher: SemanticsMatcher) =
+        composeRule.waitUntil("list item: ${matcher.description}", TIMEOUT_MS) {
+            runCatching {
+                composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(matcher)
+            }.isSuccess
+        }
+
+    /**
+     * Waits until the list has been scrolled end to end without finding [matcher]. Also passes on any other
+     * screen with a scrollable list, so follow it with an [awaitListItem] that pins the screen.
+     */
+    protected fun awaitNoListItem(matcher: SemanticsMatcher) =
+        composeRule.waitUntil("no list item: ${matcher.description}", TIMEOUT_MS) {
+            composeRule.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes().size == 1 &&
+                runCatching {
+                    composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(matcher)
+                }.exceptionOrNull() is AssertionError
+        }
+
+    protected fun awaitNode(matcher: SemanticsMatcher) =
+        composeRule.waitUntil(matcher.description, TIMEOUT_MS) {
+            composeRule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        }
+
+    protected fun awaitGone(matcher: SemanticsMatcher) =
+        composeRule.waitUntil("gone: ${matcher.description}", TIMEOUT_MS) {
+            composeRule.onAllNodes(matcher).fetchSemanticsNodes().isEmpty()
+        }
+
+    companion object {
+        private const val TIMEOUT_MS = 30_000L
+        private const val HIERARCHY_MAX_CHARS = 12 * 1024
+        private const val STATE_MAX_CHARS = 2 * 1024
+        private const val EVENTS_MAX_CHARS = 4 * 1024
+        private const val ANR_MAX_CHARS = 4 * 1024
+        private val TAG = logTag("Test", "AppFlow")
+
+        // "mCurrentFocus=Window{b0dee01 u0 Application Not Responding: com.android.launcher3}"
+        private val ANR_WINDOW = Regex("""Application Not Responding: ([\w.:]+)\}""")
+        private val RECOVERABLE_ANR_PROCESSES = setOf(
+            "com.android.launcher3",
+            "com.google.android.apps.nexuslauncher",
+            "com.android.systemui",
+        )
+    }
+}

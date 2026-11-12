@@ -1,0 +1,484 @@
+package mx.loperstack.tokkiphealth.squeezer.ui.list
+
+import android.text.format.Formatter
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.twotone.ListAlt
+import androidx.compose.material.icons.twotone.Compress
+import androidx.compose.material.icons.twotone.GridView
+import androidx.compose.material.icons.twotone.Info
+import mx.loperstack.tokkiphealth.common.compose.dialog.SdmAlertDialog
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmScaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import mx.loperstack.tokkiphealth.common.R as CommonR
+import mx.loperstack.tokkiphealth.common.compose.dialog.SdmDialogAction
+import mx.loperstack.tokkiphealth.common.compose.dialog.SdmDialogButtonBar
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmEmptyState
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmExcludeAction
+import mx.loperstack.tokkiphealth.common.compose.layout.ScrollAwareFab
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmListDefaults
+import mx.loperstack.tokkiphealth.common.compose.layout.plusBottom
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmSelectAllAction
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmSelectionTopAppBar
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmTooltipIconButton
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmTopAppBar
+import mx.loperstack.tokkiphealth.common.compose.preview.Preview2
+import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
+import mx.loperstack.tokkiphealth.common.compose.progress.ProgressOverlay
+import mx.loperstack.tokkiphealth.common.compose.selection.SelectionState
+import mx.loperstack.tokkiphealth.common.compose.selection.rememberSelectionState
+import mx.loperstack.tokkiphealth.common.compose.snackbar.ToolListEventHandler
+import mx.loperstack.tokkiphealth.common.compose.tour.LocalGuidedTourController
+import mx.loperstack.tokkiphealth.common.compose.tour.guidedTourTarget
+import mx.loperstack.tokkiphealth.common.error.ErrorEventHandler
+import mx.loperstack.tokkiphealth.common.navigation.NavigationEventHandler
+import mx.loperstack.tokkiphealth.common.ui.LayoutMode
+import mx.loperstack.tokkiphealth.squeezer.R
+import mx.loperstack.tokkiphealth.squeezer.ui.list.tour.SqueezerListTour
+import mx.loperstack.tokkiphealth.squeezer.core.CompressibleImage
+import mx.loperstack.tokkiphealth.squeezer.core.CompressibleMedia
+import mx.loperstack.tokkiphealth.squeezer.core.CompressibleVideo
+import mx.loperstack.tokkiphealth.squeezer.ui.comparison.SqueezerComparisonDialog
+import mx.loperstack.tokkiphealth.squeezer.ui.list.items.SqueezerListGridCard
+import mx.loperstack.tokkiphealth.squeezer.ui.list.items.SqueezerListLinearRow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+private data class PendingConfirmation(
+    val items: List<CompressibleMedia>,
+    val quality: Int,
+)
+
+private data class ComparisonRequest(
+    val media: CompressibleMedia,
+    val quality: Int,
+)
+
+@Composable
+fun SqueezerListScreenHost(
+    vm: SqueezerListViewModel = hiltViewModel(),
+) {
+    ErrorEventHandler(vm)
+    NavigationEventHandler(vm)
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var pendingConfirmation by remember { mutableStateOf<PendingConfirmation?>(null) }
+    var comparisonRequest by remember { mutableStateOf<ComparisonRequest?>(null) }
+
+    ToolListEventHandler(
+        events = vm.events,
+        snackbarHostState = snackbarHostState,
+        onShowExclusions = vm::openExclusionsList,
+    ) { event ->
+        if (event is SqueezerListViewModel.Event.ConfirmCompression) {
+            pendingConfirmation = PendingConfirmation(
+                items = event.items,
+                quality = event.quality,
+            )
+        }
+    }
+
+    SqueezerListScreen(
+        stateSource = vm.state,
+        snackbarHostState = snackbarHostState,
+        onNavigateUp = vm::navUp,
+        onCompressAll = vm::compressAll,
+        onCompressIds = { ids -> vm.compress(ids) },
+        onExcludeIds = { ids -> vm.exclude(ids) },
+        onToggleLayoutMode = vm::toggleLayoutMode,
+        onPreviewMedia = vm::openPreview,
+    )
+
+    val pending = pendingConfirmation
+    if (pending != null && comparisonRequest == null) {
+        SqueezerPreviewCompressionDialog(
+            items = pending.items,
+            quality = pending.quality,
+            onCompress = { quality ->
+                val ids = pending.items.map { it.identifier }.toSet()
+                pendingConfirmation = null
+                vm.compress(ids, confirmed = true, qualityOverride = quality)
+            },
+            onDismiss = { pendingConfirmation = null },
+            onViewComparison = {
+                val sample = pending.items.firstOrNull() ?: return@SqueezerPreviewCompressionDialog
+                comparisonRequest = ComparisonRequest(media = sample, quality = pending.quality)
+            },
+        )
+    }
+
+    comparisonRequest?.let { request ->
+        SqueezerComparisonDialog(
+            media = request.media,
+            quality = request.quality,
+            onClose = { comparisonRequest = null },
+        )
+    }
+}
+
+@Composable
+internal fun SqueezerListScreen(
+    stateSource: StateFlow<SqueezerListViewModel.State> = MutableStateFlow(SqueezerListViewModel.State()),
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    onNavigateUp: () -> Unit = {},
+    onCompressAll: () -> Unit = {},
+    onCompressIds: (Set<CompressibleMedia.Id>) -> Unit = {},
+    onExcludeIds: (Set<CompressibleMedia.Id>) -> Unit = {},
+    onToggleLayoutMode: () -> Unit = {},
+    onPreviewMedia: (CompressibleMedia) -> Unit = {},
+) {
+    val context = LocalContext.current
+    val state by stateSource.collectAsStateWithLifecycle()
+    val media = state.media ?: emptyList()
+    val itemIds = remember(media) { media.map { it.identifier }.toSet() }
+
+    val selection = rememberSelectionState<CompressibleMedia.Id>()
+
+    LaunchedEffect(itemIds) {
+        selection.retainAll(itemIds)
+    }
+
+    var showMarkersInfo by remember { mutableStateOf(false) }
+
+    val tourController = LocalGuidedTourController.current
+    val tourDef = remember { SqueezerListTour.definition() }
+    var tourStartAttempted by remember { mutableStateOf(false) }
+    // The compress-all FAB is present once a scan has produced media (and no selection is active,
+    // which is the case at tour start).
+    val tourReady = state.progress == null && media.isNotEmpty()
+    LaunchedEffect(tourReady) {
+        if (!tourReady || tourStartAttempted) return@LaunchedEffect
+        // shouldStart() is false for both "done/dismissed" and "another tour active"; mark attempted
+        // only after it passes so a transient block can't permanently suppress this tour.
+        if (!tourController.shouldStart(tourDef)) return@LaunchedEffect
+        tourStartAttempted = true
+        tourController.start(tourDef)
+    }
+
+    BackHandler(enabled = selection.isActive) { selection.clear() }
+
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
+    val activeScroll: ScrollableState =
+        if (state.layoutMode == LayoutMode.GRID) gridState else listState
+
+    // remember keyed on the stable inputs so these O(n) passes don't re-run on unrelated
+    // recompositions (media ref is stable across progress ticks now that progress is decoupled).
+    val totalSavings = remember(media) { media.sumOf { it.estimatedSavings ?: 0L } }
+    val subtitle = if (state.progress == null && media.isNotEmpty()) {
+        val countText = pluralStringResource(
+            CommonR.plurals.result_x_items,
+            media.size,
+            media.size,
+        )
+        if (totalSavings > 0) "$countText • ~" + Formatter.formatShortFileSize(context, totalSavings) else countText
+    } else {
+        null
+    }
+
+    SdmScaffold(
+        topBar = {
+            if (!selection.isActive) {
+                SdmTopAppBar(
+                    title = stringResource(CommonR.string.squeezer_tool_name),
+                    subtitle = subtitle,
+                    onNavigateUp = onNavigateUp,
+                    actions = {
+                        if (state.progress == null && media.isNotEmpty()) {
+                            SdmTooltipIconButton(
+                                icon = when (state.layoutMode) {
+                                    LayoutMode.LINEAR -> Icons.TwoTone.GridView
+                                    LayoutMode.GRID -> Icons.AutoMirrored.TwoTone.ListAlt
+                                },
+                                label = stringResource(CommonR.string.general_toggle_layout_mode),
+                                onClick = onToggleLayoutMode,
+                            )
+                        }
+                        SdmTooltipIconButton(
+                            icon = Icons.TwoTone.Info,
+                            label = stringResource(R.string.squeezer_markers_dialog_title),
+                            onClick = { showMarkersInfo = true },
+                        )
+                    },
+                )
+            } else {
+                SqueezerSelectionTopAppBar(
+                    selection = selection,
+                    media = media,
+                    itemIds = itemIds,
+                    onCompressIds = onCompressIds,
+                    onExcludeIds = onExcludeIds,
+                )
+            }
+        },
+        floatingActionButton = {
+            if (state.progress == null && media.isNotEmpty() && !selection.isActive) {
+                ScrollAwareFab(scrollState = activeScroll) {
+                    ExtendedFloatingActionButton(
+                        onClick = onCompressAll,
+                        modifier = Modifier.guidedTourTarget(SqueezerListTour.COMPRESS_ALL_TARGET),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.TwoTone.Compress,
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text(stringResource(R.string.squeezer_compress_all_action)) },
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        elevation = FloatingActionButtonDefaults.elevation(),
+                    )
+                }
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+        ) {
+            ProgressOverlay(
+                data = state.progress,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when {
+                    state.media == null -> Box(modifier = Modifier.fillMaxSize())
+
+                    media.isEmpty() -> SdmEmptyState()
+
+                    state.layoutMode == LayoutMode.LINEAR -> LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = SdmListDefaults.FabClearance),
+                    ) {
+                        items(media, key = { it.identifier.value }) { item ->
+                            SqueezerListLinearRow(
+                                media = item,
+                                isSelected = selection.isSelected(item.identifier),
+                                onTap = {
+                                    if (!selection.isActive) {
+                                        onCompressIds(setOf(item.identifier))
+                                    } else {
+                                        selection.toggle(item.identifier)
+                                    }
+                                },
+                                onLongPress = {
+                                    selection.select(item.identifier)
+                                },
+                                onPreviewTap = {
+                                    if (!selection.isActive) onPreviewMedia(item)
+                                },
+                            )
+                        }
+                    }
+
+                    state.layoutMode == LayoutMode.GRID -> LazyVerticalGrid(
+                        columns = GridCells.Adaptive(144.dp),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = SdmListDefaults.GridTileContentPadding.plusBottom(SdmListDefaults.FabClearance),
+                    ) {
+                        items(media, key = { it.identifier.value }) { item ->
+                            SqueezerListGridCard(
+                                media = item,
+                                isSelected = selection.isSelected(item.identifier),
+                                onTap = {
+                                    if (!selection.isActive) {
+                                        onCompressIds(setOf(item.identifier))
+                                    } else {
+                                        selection.toggle(item.identifier)
+                                    }
+                                },
+                                onLongPress = {
+                                    selection.select(item.identifier)
+                                },
+                                onPreviewTap = {
+                                    if (!selection.isActive) onPreviewMedia(item)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showMarkersInfo) {
+        SqueezerMarkersDialog(onDismiss = { showMarkersInfo = false })
+    }
+}
+
+@Composable
+private fun SqueezerSelectionTopAppBar(
+    selection: SelectionState<CompressibleMedia.Id>,
+    media: List<CompressibleMedia>,
+    itemIds: Set<CompressibleMedia.Id>,
+    onCompressIds: (Set<CompressibleMedia.Id>) -> Unit,
+    onExcludeIds: (Set<CompressibleMedia.Id>) -> Unit,
+) {
+    val context = LocalContext.current
+    // Aggregate over the WHOLE selection — isolated to this small composable so a toggle only
+    // recomposes the top bar, not the lazy list (Rule 3).
+    val selected = selection.selected
+    val selectedSavings = remember(media, selected) {
+        media.filter { it.identifier in selected }.sumOf { it.estimatedSavings ?: 0L }
+    }
+    val selectionSubtitle = selectedSavings
+        .takeIf { it > 0 }
+        ?.let { "~" + Formatter.formatShortFileSize(context, it) }
+
+    SdmSelectionTopAppBar(
+        selectedCount = selection.count,
+        subtitle = selectionSubtitle,
+        onClearSelection = { selection.clear() },
+        actions = {
+            SdmTooltipIconButton(
+                icon = Icons.TwoTone.Compress,
+                label = stringResource(R.string.squeezer_compress_action),
+                onClick = { onCompressIds(selection.selected) },
+            )
+            SdmExcludeAction(onClick = {
+                val ids = selection.selected
+                selection.clear()
+                onExcludeIds(ids)
+            })
+            SdmSelectAllAction(
+                visible = selection.count < itemIds.size,
+                onClick = { selection.setSelection(itemIds) },
+            )
+        },
+    )
+}
+
+@Composable
+private fun SqueezerPreviewCompressionDialog(
+    items: List<CompressibleMedia>,
+    quality: Int,
+    onCompress: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    onViewComparison: () -> Unit,
+) {
+    val context = LocalContext.current
+    val totalSize = items.sumOf { it.size }
+    val estimatedSavings = items.sumOf { it.estimatedSavings ?: 0L }
+    // Comparison only makes sense when all items share a media type — JPEG/WebP go through the
+    // image pipeline; videos through frame extraction. A mixed selection has no single sample
+    // representative of "what compression will look like".
+    val canCompare = items.isNotEmpty() && (
+        items.all { it is CompressibleImage } || items.all { it is CompressibleVideo }
+        )
+
+    SdmAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.squeezer_preview_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.squeezer_preview_x_images,
+                        items.size,
+                        items.size,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.squeezer_preview_total_size),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            text = Formatter.formatShortFileSize(context, totalSize),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = stringResource(R.string.squeezer_preview_estimated_savings),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            text = Formatter.formatShortFileSize(context, estimatedSavings),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            SdmDialogButtonBar(
+                positive = SdmDialogAction(
+                    label = stringResource(R.string.squeezer_compress_action),
+                    onClick = { onCompress(quality) },
+                ),
+                negative = SdmDialogAction(
+                    label = stringResource(CommonR.string.general_cancel_action),
+                    onClick = onDismiss,
+                ),
+                neutral = if (canCompare) {
+                    SdmDialogAction(
+                        label = stringResource(R.string.squeezer_compare_action),
+                        onClick = onViewComparison,
+                    )
+                } else {
+                    null
+                },
+            )
+        },
+    )
+}
+
+@Preview2
+@Composable
+private fun SqueezerListScreenEmptyPreview() {
+    PreviewWrapper {
+        SqueezerListScreen(
+            stateSource = MutableStateFlow(SqueezerListViewModel.State(media = emptyList())),
+        )
+    }
+}

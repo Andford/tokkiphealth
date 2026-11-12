@@ -1,0 +1,483 @@
+package mx.loperstack.tokkiphealth.squeezer.core.scanner
+
+import android.media.MediaMetadataRetriever
+import mx.loperstack.tokkiphealth.common.MimeTypeTool
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.Bugs
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.VERBOSE
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.APathGateway
+import mx.loperstack.tokkiphealth.common.files.APathLookup
+import mx.loperstack.tokkiphealth.common.files.isFile
+import mx.loperstack.tokkiphealth.common.files.local.LocalGateway
+import mx.loperstack.tokkiphealth.common.files.local.LocalPath
+import mx.loperstack.tokkiphealth.common.flow.throttleLatest
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.progress.updateProgressCount
+import mx.loperstack.tokkiphealth.common.progress.updateProgressPrimary
+import mx.loperstack.tokkiphealth.common.progress.updateProgressSecondary
+import mx.loperstack.tokkiphealth.exclusion.core.ExclusionManager
+import mx.loperstack.tokkiphealth.exclusion.core.pathExclusions
+import mx.loperstack.tokkiphealth.exclusion.core.types.PathExclusionIndex
+import mx.loperstack.tokkiphealth.exclusion.core.types.matches
+import mx.loperstack.tokkiphealth.main.core.SDMTool
+import mx.loperstack.tokkiphealth.squeezer.core.CompressibleImage
+import mx.loperstack.tokkiphealth.squeezer.core.CompressibleMedia
+import mx.loperstack.tokkiphealth.squeezer.core.CompressibleVideo
+import mx.loperstack.tokkiphealth.squeezer.core.CompressionEstimator
+import mx.loperstack.tokkiphealth.squeezer.core.PriorCompression
+import mx.loperstack.tokkiphealth.squeezer.core.SqueezerEligibility
+import mx.loperstack.tokkiphealth.squeezer.core.SqueezerSettings
+import mx.loperstack.tokkiphealth.squeezer.core.history.CompressionHistoryDatabase
+import mx.loperstack.tokkiphealth.squeezer.core.history.CompressionHistoryEntity
+import mx.loperstack.tokkiphealth.squeezer.core.history.ImageContentHasher
+import mx.loperstack.tokkiphealth.squeezer.core.history.VideoContentHasher
+import mx.loperstack.tokkiphealth.squeezer.core.processor.ExifPreserver
+import mx.loperstack.tokkiphealth.squeezer.core.processor.ImageCompressor
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapMerge
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
+import javax.inject.Inject
+
+
+class MediaScanner @Inject constructor(
+    private val exclusionManager: ExclusionManager,
+    private val dispatcherProvider: DispatcherProvider,
+    private val localGateway: LocalGateway,
+    private val mimeTypeTool: MimeTypeTool,
+    private val historyDatabase: CompressionHistoryDatabase,
+    private val imageContentHasher: ImageContentHasher,
+    private val videoContentHasher: VideoContentHasher,
+    private val compressionEstimator: CompressionEstimator,
+    private val exifPreserver: ExifPreserver,
+    private val lossyAuxDetector: LossyAuxDetector,
+    private val dimensionProbe: ImageDimensionProbe,
+    private val settings: SqueezerSettings,
+) : Progress.Host, Progress.Client {
+
+    private val progressPub = MutableStateFlow<Progress.Data?>(Progress.Data())
+    override val progress: Flow<Progress.Data?> = progressPub.throttleLatest(250)
+
+    override fun updateProgress(update: (Progress.Data?) -> Progress.Data?) {
+        progressPub.value = update(progressPub.value)
+    }
+
+    data class Options(
+        val paths: Set<APath>,
+        val minimumSize: Long,
+        val minAge: Duration?,
+        val enabledMimeTypes: Set<String>,
+        val skipPreviouslyCompressed: Boolean,
+        val compressionQuality: Int,
+        /** When false (default), skip photos with an HDR gain map or depth map. */
+        val includeLossyAuxImages: Boolean = false,
+        /** When false (default), skip Motion Photos so the re-encode can't drop their clip. */
+        val includeMotionPhotos: Boolean = false,
+        /** When false (default), skip images the re-encode would decode at reduced resolution. */
+        val includeOversizedImages: Boolean = false,
+    )
+
+    data class ScanResult(
+        val items: Set<CompressibleMedia>,
+        val skippedInaccessibleCount: Int,
+        /** Photos excluded to preserve their HDR gain map / depth map. */
+        val skippedLossyAuxCount: Int = 0,
+        /** Motion Photos excluded to preserve their embedded clip. */
+        val skippedMotionPhotoCount: Int = 0,
+        /** Images excluded because compression would halve their resolution. */
+        val skippedOversizedCount: Int = 0,
+    )
+
+    private class SkipCounters {
+        val lossyAux = AtomicInteger(0)
+        val motionPhoto = AtomicInteger(0)
+        val oversized = AtomicInteger(0)
+    }
+
+    private suspend fun createSearchFlow(paths: Set<APath>): Flow<APathLookup<*>> {
+        val exclusions = exclusionManager.pathExclusions(SDMTool.Type.SQUEEZER)
+        log(TAG) { "Squeezer exclusions are: $exclusions" }
+        val exclusionIndex = PathExclusionIndex(exclusions)
+        log(TAG) { "Search paths: $paths" }
+
+        // Walk in Mode.NORMAL only: Transformer / BitmapFactory can't read files that would
+        // require root/ADB escalation anyway, so escalating here just wastes work. Paths are
+        // normalized to LocalPath at save-time in SqueezerSetupViewModel — anything non-local
+        // that survives is stale settings and gets dropped with a warning.
+        return paths.asFlow()
+            .flatMapMerge(2) { path ->
+                val localPath = path as? LocalPath
+                if (localPath == null) {
+                    log(TAG, WARN) { "Skipping non-local root (stale settings?): $path" }
+                    return@flatMapMerge emptyFlow()
+                }
+                val filter: suspend (APathLookup<*>) -> Boolean = filter@{ toCheck: APathLookup<*> ->
+                    !exclusionIndex.matches(toCheck)
+                }
+                localGateway.walk(
+                    path = localPath,
+                    options = APathGateway.WalkOptions(onFilter = filter),
+                    mode = LocalGateway.Mode.NORMAL,
+                )
+            }
+    }
+
+    suspend fun scan(options: Options): ScanResult {
+        log(TAG) { "scan($options)" }
+
+        if (options.paths.isEmpty()) {
+            log(TAG) { "No search paths configured, returning empty result" }
+            return ScanResult(items = emptySet(), skippedInaccessibleCount = 0)
+        }
+
+        updateProgressPrimary(mx.loperstack.tokkiphealth.common.R.string.general_progress_searching)
+        updateProgressSecondary()
+        updateProgressCount(Progress.Count.Indeterminate())
+
+        val skippedInaccessible = AtomicInteger(0)
+        val skips = SkipCounters()
+
+        val searchPaths = options.paths
+        val searchFlow = createSearchFlow(searchPaths)
+            .flowOn(dispatcherProvider.IO)
+            .buffer(1024)
+            .filter { lookup ->
+                if (!lookup.isFile) return@filter false
+
+                // TODO(gateway): Transformer + BitmapFactory require raw java.io.File, so
+                // files that would need root/ADB escalation are intentionally dropped. This
+                // is a best-effort stat check — processors re-run it as a preflight to
+                // catch state drift between scan and process.
+                val verdict = SqueezerEligibility.check(lookup.lookedUp)
+                if (verdict != SqueezerEligibility.Verdict.OK) {
+                    if (Bugs.isTrace) log(TAG, VERBOSE) { "Skipping ($verdict): $lookup" }
+                    skippedInaccessible.incrementAndGet()
+                    return@filter false
+                }
+
+                val isGoodSize = lookup.size >= options.minimumSize
+                if (!isGoodSize) {
+                    if (Bugs.isTrace) log(TAG, VERBOSE) { "Skipping (size): $lookup" }
+                    return@filter false
+                }
+
+                options.minAge?.let { minAge ->
+                    val cutoff = Instant.now().minus(minAge)
+                    if (lookup.modifiedAt.isAfter(cutoff)) {
+                        if (Bugs.isTrace) log(TAG, VERBOSE) { "Skipping (too recent): $lookup" }
+                        return@filter false
+                    }
+                }
+
+                true
+            }
+
+        var scannedCount = 0
+        val results = mutableSetOf<CompressibleMedia>()
+
+        searchFlow.collect { lookup ->
+            scannedCount++
+            // Keep the indeterminate "searching…" state during the walk — the total isn't known
+            // yet, and a Count here rendered a misleading "0/N" (Counter(Int) sets current=0).
+            updateProgressSecondary(lookup.userReadablePath)
+
+            val mimeType = mimeTypeTool.determineMimeType(lookup)
+
+            val isImage = mimeType in CompressibleImage.SUPPORTED_MIME_TYPES
+            val isVideo = mimeType in CompressibleVideo.SUPPORTED_MIME_TYPES
+
+            if (!isImage && !isVideo) {
+                if (Bugs.isTrace) log(TAG, VERBOSE) { "Skipping (mime): $mimeType - $lookup" }
+                return@collect
+            }
+
+            if (mimeType !in options.enabledMimeTypes) {
+                if (Bugs.isTrace) log(TAG, VERBOSE) { "Skipping (type disabled): $mimeType - $lookup" }
+                return@collect
+            }
+
+            if (isImage) {
+                val media = processImageCandidate(lookup, mimeType, options, skips)
+                if (media != null) results.add(media)
+            } else if (isVideo) {
+                val media = processVideoCandidate(lookup, mimeType, options)
+                if (media != null) results.add(media)
+            }
+        }
+
+        log(TAG) {
+            "Scan complete: $scannedCount files scanned, ${results.size} compressible media found, " +
+                "${skippedInaccessible.get()} skipped (inaccessible), " +
+                "${skips.lossyAux.get()} skipped (HDR/depth aux), " +
+                "${skips.motionPhoto.get()} skipped (Motion Photo), " +
+                "${skips.oversized.get()} skipped (oversized)"
+        }
+        return ScanResult(
+            items = results,
+            skippedInaccessibleCount = skippedInaccessible.get(),
+            skippedLossyAuxCount = skips.lossyAux.get(),
+            skippedMotionPhotoCount = skips.motionPhoto.get(),
+            skippedOversizedCount = skips.oversized.get(),
+        )
+    }
+
+    private suspend fun processImageCandidate(
+        lookup: APathLookup<*>,
+        mimeType: String,
+        options: Options,
+        skips: SkipCounters,
+    ): CompressibleImage? {
+        val priorCompression = detectImagePriorCompression(lookup)
+
+        if (options.skipPreviouslyCompressed && priorCompression != null) {
+            log(TAG, VERBOSE) { "Skipping image ($priorCompression): $lookup" }
+            return null
+        }
+
+        // Detects photos whose HDR gain map / depth map compression would silently destroy. Runs
+        // BEFORE the (HEIC-only) multi-image guard so a HEIF gain-map/depth file is attributed to
+        // "HDR/depth preserved" rather than the multi-image reason. Format-wide (also catches Ultra
+        // HDR JPEG). Plain Live-Photo HEICs carry no gain-map signature, so they still fall through
+        // to the hard multi-image skip below.
+        val localFile = (lookup.lookedUp as? LocalPath)?.let { File(it.path) }
+        val hasLossyAux = localFile != null && lossyAuxDetector.hasLossyAux(localFile, mimeType)
+        if (hasLossyAux && !options.includeLossyAuxImages) {
+            skips.lossyAux.incrementAndGet()
+            log(TAG, VERBOSE) { "Skipping image with HDR/depth aux data: $lookup" }
+            return null
+        }
+
+        // Intentionally NOT bypassed by includeLossyAuxImages: a multi-image HEIC may hold sibling
+        // photos (Live/Motion Photo) that compression would destroy, and METADATA_KEY_IMAGE_COUNT
+        // can't distinguish those from a counted aux gain map. So even when the user opts into
+        // compressing HDR/depth photos, a HEIC the platform reports as multi-image stays protected.
+        if (mimeType in CompressibleImage.HEIC_MIME_TYPES && hasMultipleHeifImages(lookup)) {
+            log(TAG, VERBOSE) { "Skipping HEIC with auxiliary/sibling images: $lookup" }
+            return null
+        }
+
+        // Same shape as the HDR/depth guard: opt-in off means the file is excluded and counted,
+        // opt-in on means it stays in the results carrying the marker.
+        val hasMotionVideo = localFile != null && lossyAuxDetector.hasMotionVideo(localFile, mimeType)
+        if (hasMotionVideo && !options.includeMotionPhotos) {
+            skips.motionPhoto.incrementAndGet()
+            log(TAG, VERBOSE) { "Skipping Motion Photo: $lookup" }
+            return null
+        }
+
+        val willDownscale = localFile
+            ?.let { dimensionProbe.read(it) }
+            ?.let { ImageCompressor.willDownscale(it.width, it.height) } == true
+        if (willDownscale && !options.includeOversizedImages) {
+            skips.oversized.incrementAndGet()
+            log(TAG, VERBOSE) { "Skipping oversized image: $lookup" }
+            return null
+        }
+
+        val estimatedCompressedSize = compressionEstimator.estimateCompressedSize(
+            lookup.size, mimeType, options.compressionQuality,
+        )
+
+        return CompressibleImage(
+            lookup = lookup,
+            mimeType = mimeType,
+            estimatedCompressedSize = estimatedCompressedSize,
+            priorCompression = priorCompression,
+            hasLossyAux = hasLossyAux,
+            hasMotionVideo = hasMotionVideo,
+            willDownscale = willDownscale,
+        ).also {
+            log(TAG, VERBOSE) { "Found compressible image: $it" }
+        }
+    }
+
+    /**
+     * Read whether a previous run already compressed this image. Evaluated regardless of
+     * [Options.skipPreviouslyCompressed]: with the setting off the file stays in the results and
+     * the outcome is shown on its row instead.
+     */
+    private suspend fun detectImagePriorCompression(lookup: APathLookup<*>): PriorCompression? {
+        // The EXIF marker survives a cleared history and is only written after a compression that
+        // actually replaced the file, so a positive marker means COMPRESSED and saves the hash.
+        val hasExifMarker = if (settings.writeExifMarker.value()) {
+            try {
+                val localPath = lookup.lookedUp as? LocalPath
+                localPath?.let { exifPreserver.hasCompressionMarker(File(it.path)) } ?: false
+            } catch (e: Exception) {
+                log(TAG, WARN) { "Failed to check EXIF marker for $lookup: ${e.message}" }
+                false
+            }
+        } else {
+            false
+        }
+        if (hasExifMarker) return PriorCompression.COMPRESSED
+
+        return try {
+            val identifier = imageContentHasher.computeHash(lookup.lookedUp)
+            historyDatabase.getOutcome(identifier.contentId).toPriorCompression()
+        } catch (e: Exception) {
+            log(TAG, WARN) { "Failed to compute content hash for $lookup: ${e.message}" }
+            null
+        }
+    }
+
+    /**
+     * A HEIF container can hold multiple images: Apple Live Photo siblings, Samsung Motion Photo
+     * frames, depth/portrait auxiliary images, HDR gain maps. The compression pipeline takes a
+     * single decoded [android.graphics.Bitmap] and feeds it to `HeifWriter` with `setMaxImages(1)`,
+     * which would silently drop everything except the primary image. Files like this are excluded
+     * from results rather than destroyed.
+     *
+     * Fails closed: if `MediaMetadataRetriever` can't open the file or `METADATA_KEY_IMAGE_COUNT`
+     * is unreadable, the file is treated as multi-image (skipped). The cost of a false-positive
+     * skip is a missed compression opportunity; the cost of a false-negative is silently destroying
+     * the user's auxiliary images. The toggle is opt-in, so erring on the side of caution is safe.
+     */
+    private fun hasMultipleHeifImages(lookup: APathLookup<*>): Boolean {
+        val localPath = lookup.lookedUp as? LocalPath ?: return true
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(File(localPath.path).absolutePath)
+            val rawCount = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_IMAGE_COUNT)
+            val count = rawCount?.toIntOrNull()
+            if (count == null) {
+                log(TAG, WARN) { "Unknown HEIF image count for $lookup (raw=$rawCount); treating as multi-image" }
+                true
+            } else {
+                count > 1
+            }
+        } catch (e: Exception) {
+            log(TAG, WARN) { "Failed to read HEIF image count for $lookup; treating as multi-image: ${e.message}" }
+            true
+        } finally {
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+                log(TAG, WARN) { "MediaMetadataRetriever.release() threw: ${e.message}" }
+            }
+        }
+    }
+
+    private suspend fun processVideoCandidate(
+        lookup: APathLookup<*>,
+        mimeType: String,
+        options: Options,
+    ): CompressibleVideo? {
+        val metadata = try {
+            withContext(dispatcherProvider.IO) { extractVideoMetadata(lookup) }
+        } catch (e: Exception) {
+            log(TAG, WARN) { "Failed to extract video metadata for $lookup: ${e.message}" }
+            return null
+        }
+
+        if (metadata == null) {
+            log(TAG, VERBOSE) { "Skipping (no video metadata): $lookup" }
+            return null
+        }
+
+        if (metadata.videoWidth <= 0) {
+            log(TAG, VERBOSE) { "Skipping audio-only file (no video track): $lookup" }
+            return null
+        }
+
+        val priorCompression = try {
+            val identifier = videoContentHasher.computeHash(lookup.lookedUp)
+            historyDatabase.getOutcome(identifier.contentId).toPriorCompression()
+        } catch (e: Exception) {
+            log(TAG, WARN) { "Failed to compute video content hash for $lookup: ${e.message}" }
+            null
+        }
+
+        if (options.skipPreviouslyCompressed && priorCompression != null) {
+            log(TAG, VERBOSE) { "Skipping video ($priorCompression): $lookup" }
+            return null
+        }
+
+        val estimatedCompressedSize = compressionEstimator.estimateVideoSize(
+            originalSize = lookup.size,
+            durationMs = metadata.durationMs,
+            originalBitrateBps = metadata.bitrateBps,
+            quality = options.compressionQuality,
+        )
+
+        return CompressibleVideo(
+            lookup = lookup,
+            mimeType = mimeType,
+            estimatedCompressedSize = estimatedCompressedSize,
+            priorCompression = priorCompression,
+            durationMs = metadata.durationMs,
+            bitrateBps = metadata.bitrateBps,
+        ).also {
+            log(TAG, VERBOSE) { "Found compressible video: $it" }
+        }
+    }
+
+    private fun extractVideoMetadata(lookup: APathLookup<*>): VideoMetadata? {
+        val localPath = lookup.lookedUp as? LocalPath ?: return null
+
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(File(localPath.path).absolutePath)
+
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val durationMs = durationStr?.toLongOrNull() ?: return null
+            if (durationMs <= 0) return null
+
+            val videoWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toIntOrNull() ?: 0
+
+            // NOTE: METADATA_KEY_BITRATE is total container bitrate (audio + video combined).
+            // For typical phone video this is fine (audio << video), but for audio-heavy
+            // content it inflates the estimate. Future improvement: extract video-only
+            // bitrate via MediaExtractor track-level metadata.
+            val bitrateStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+            var bitrateBps = bitrateStr?.toLongOrNull() ?: -1L
+
+            if (bitrateBps <= 0) {
+                bitrateBps = (lookup.size * 8 * 1000 / durationMs).coerceAtMost(MAX_BITRATE_BPS)
+            }
+
+            VideoMetadata(
+                durationMs = durationMs,
+                bitrateBps = bitrateBps.coerceAtMost(MAX_BITRATE_BPS),
+                videoWidth = videoWidth,
+            )
+        } catch (e: Exception) {
+            log(TAG, WARN) { "MediaMetadataRetriever failed for $lookup: ${e.message}" }
+            null
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private data class VideoMetadata(
+        val durationMs: Long,
+        val bitrateBps: Long,
+        val videoWidth: Int,
+    )
+
+    companion object {
+        private const val MAX_BITRATE_BPS = 200_000_000L // 200 Mbps
+        private val TAG = logTag("Squeezer", "Scanner")
+
+        private fun CompressionHistoryEntity.Outcome?.toPriorCompression(): PriorCompression? = when (this) {
+            CompressionHistoryEntity.Outcome.COMPRESSED -> PriorCompression.COMPRESSED
+            CompressionHistoryEntity.Outcome.TRIED_NO_SAVINGS -> PriorCompression.NO_SAVINGS
+            null -> null
+        }
+    }
+}

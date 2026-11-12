@@ -1,0 +1,161 @@
+package mx.loperstack.tokkiphealth.deduplicator.ui.details
+
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
+import mx.loperstack.tokkiphealth.common.compose.tour.GuidedTourController
+import mx.loperstack.tokkiphealth.common.compose.tour.LocalGuidedTourController
+import mx.loperstack.tokkiphealth.deduplicator.core.Duplicate
+import mx.loperstack.tokkiphealth.deduplicator.core.scanner.checksum.ChecksumDuplicate
+import mx.loperstack.tokkiphealth.deduplicator.ui.preview.previewChecksumDuplicate
+import mx.loperstack.tokkiphealth.deduplicator.ui.preview.previewCluster
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Test
+import testhelpers.compose.BaseComposeRobolectricTest
+
+// HorizontalPager + ScrollableTabRow are known to interact poorly with Robolectric for multi-page
+// assertions. Tests here intentionally stay on single-cluster / empty state and avoid pager-swipe
+// interactions or tab-switching.
+class DeduplicatorDetailsScreenTest : BaseComposeRobolectricTest() {
+
+    private fun cluster(id: String, dupeNames: List<String> = listOf("a", "b")): Duplicate.Cluster {
+        val duplicates = dupeNames.map { name ->
+            previewChecksumDuplicate(
+                pathSegments = arrayOf("storage", "emulated", "0", "Pictures", "$id-$name.jpg"),
+                size = 1024L,
+                hashSeed = "$id-$name",
+            )
+        }.toSet()
+        val group = ChecksumDuplicate.Group(
+            duplicates = duplicates,
+            identifier = Duplicate.Group.Id("$id-group"),
+        )
+        return previewCluster(
+            identifier = Duplicate.Cluster.Id(id),
+            groups = setOf(group),
+        )
+    }
+
+    // The screen reads `LocalGuidedTourController.current`; the CompositionLocal has no default
+    // (errors if unprovided). Provide a relaxed mock that opts out of starting any tour.
+    private fun mockTourController(): GuidedTourController = mockk<GuidedTourController>(relaxed = true).apply {
+        coEvery { shouldStart(any()) } returns false
+        every { session } returns MutableStateFlow(null)
+    }
+
+    private fun ComposeContentTestRule.setDetailsScreen(state: DeduplicatorDetailsViewModel.State?) {
+        setContent {
+            CompositionLocalProvider(LocalGuidedTourController provides mockTourController()) {
+                PreviewWrapper {
+                    DeduplicatorDetailsScreen(stateSource = MutableStateFlow(state))
+                }
+            }
+        }
+    }
+
+    // The screen stacks three scrollables (tab strip, pager, cluster list); only the cluster list
+    // scrolls vertically, so match on that axis to stay unambiguous.
+    private fun ComposeContentTestRule.scrollTo(text: String) {
+        onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))
+            .performScrollToNode(hasText(text))
+    }
+
+    @Test
+    fun `loading state renders nothing meaningful besides the top bar title`() {
+        composeRule.setDetailsScreen(null)
+
+        // Top bar title is always visible.
+        composeRule.onNodeWithText("Deduplicator").assertExists()
+        // Empty placeholder must NOT render during loading.
+        composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
+    }
+
+    @Test
+    fun `empty items list shows the Empty placeholder`() {
+        composeRule.setDetailsScreen(
+            DeduplicatorDetailsViewModel.State(
+                items = emptyList(),
+                target = null,
+                progress = null,
+            ),
+        )
+
+        composeRule.onNodeWithText("Empty").assertExists()
+    }
+
+    @Test
+    fun `single-cluster state renders the cluster contents — not just the top bar`() {
+        val onlyCluster = cluster("vacation", dupeNames = listOf("trip", "trip-copy"))
+        composeRule.setDetailsScreen(
+            DeduplicatorDetailsViewModel.State(
+                items = listOf(onlyCluster),
+                target = onlyCluster.identifier,
+                progress = null,
+            ),
+        )
+
+        composeRule.onNodeWithText("Deduplicator").assertExists()
+        composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
+        // The cluster summary card unconditionally renders the freeable-size headline
+        // ("… can be freed") — a load-bearing signal that ClusterContent composed, not just the
+        // top bar (which only shows "Deduplicator" / "Details").
+        composeRule.onNodeWithText("can be freed", substring = true).assertExists()
+    }
+
+    @Test
+    fun `single-cluster state in directory view still renders the cluster summary card`() {
+        // Switching to directory view changes the per-duplicate layout below the summary card but
+        // the freeable-size headline stays put. Asserting on it proves the summary card is intact
+        // under both view modes — a regression that gated it on flat-view would flunk.
+        val onlyCluster = cluster("vacation", dupeNames = listOf("dirtest", "dirtest-copy"))
+        composeRule.setDetailsScreen(
+            DeduplicatorDetailsViewModel.State(
+                items = listOf(onlyCluster),
+                target = onlyCluster.identifier,
+                progress = null,
+                isDirectoryView = true,
+            ),
+        )
+
+        composeRule.onNodeWithText("can be freed", substring = true).assertExists()
+    }
+
+    @Test
+    fun `long-pressing a duplicate row gates the cluster card actions`() {
+        // Drives the screen's own `!selection.isActive` computation instead of injecting the flag.
+        val onlyCluster = cluster("gate", dupeNames = listOf("target", "target-copy"))
+        composeRule.setDetailsScreen(
+            DeduplicatorDetailsViewModel.State(
+                items = listOf(onlyCluster),
+                target = onlyCluster.identifier,
+                progress = null,
+            ),
+        )
+
+        // Only the cluster header card renders "Exclude"/"Delete" as text; the group card's delete
+        // is an icon carrying a content description.
+        composeRule.onNodeWithText("Exclude").assertIsEnabled()
+        composeRule.onNodeWithText("Delete").assertIsEnabled()
+
+        composeRule.scrollTo("gate-target.jpg")
+        composeRule.onNodeWithText("gate-target.jpg").performTouchInput { longClick() }
+
+        composeRule.scrollTo("Exclude")
+        composeRule.onNodeWithText("Exclude").assertIsNotEnabled()
+        composeRule.onNodeWithText("Delete").assertIsNotEnabled()
+    }
+}

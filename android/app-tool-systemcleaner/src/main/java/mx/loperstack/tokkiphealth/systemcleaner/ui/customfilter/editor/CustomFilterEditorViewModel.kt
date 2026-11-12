@@ -1,0 +1,361 @@
+package mx.loperstack.tokkiphealth.systemcleaner.ui.customfilter.editor
+
+import dagger.hilt.android.lifecycle.HiltViewModel
+import mx.loperstack.tokkiphealth.common.areas.DataArea
+import mx.loperstack.tokkiphealth.common.areas.DataAreaManager
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.FileType
+import mx.loperstack.tokkiphealth.common.filter.CustomFilterEditorOptions
+import mx.loperstack.tokkiphealth.common.filter.CustomFilterEditorRoute
+import mx.loperstack.tokkiphealth.common.flow.DynamicStateFlow
+import mx.loperstack.tokkiphealth.common.flow.SingleEventFlow
+import mx.loperstack.tokkiphealth.common.flow.combine
+import mx.loperstack.tokkiphealth.common.flow.throttleLatest
+import mx.loperstack.tokkiphealth.common.flow.withPrevious
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.sieve.NameCriterium
+import mx.loperstack.tokkiphealth.common.sieve.SegmentCriterium
+import mx.loperstack.tokkiphealth.common.sieve.SieveCriterium
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.systemcleaner.core.SystemCleanerSettings
+import mx.loperstack.tokkiphealth.systemcleaner.core.SystemCrawler
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.FilterIdentifier
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.custom.CustomFilter
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.custom.CustomFilterConfig
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.custom.CustomFilterRepo
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.custom.currentConfigs
+import mx.loperstack.tokkiphealth.systemcleaner.core.filter.custom.toggleCustomFilter
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.scan
+import java.time.Duration
+import java.time.Instant
+import javax.inject.Inject
+
+@HiltViewModel
+class CustomFilterEditorViewModel @Inject constructor(
+    dispatcherProvider: DispatcherProvider,
+    private val filterRepo: CustomFilterRepo,
+    dataAreaManager: DataAreaManager,
+    private val crawler: SystemCrawler,
+    private val filterFactory: CustomFilter.Factory,
+    private val settings: SystemCleanerSettings,
+) : ViewModel4(dispatcherProvider, tag = TAG) {
+
+    private val routeFlow = MutableStateFlow<CustomFilterEditorRoute?>(null)
+
+    /** Set the route exactly once. Subsequent calls are no-ops so recompositions don't reset state. */
+    fun bindRoute(route: CustomFilterEditorRoute) {
+        if (routeFlow.value != null) return
+        log(TAG) { "bindRoute($route)" }
+        routeFlow.value = route
+    }
+
+    val events = SingleEventFlow<Event>()
+
+    private val currentState = DynamicStateFlow(TAG, vmScope) {
+        val route = routeFlow.filterNotNull().first()
+        val initialOptions: CustomFilterEditorOptions? = route.initial
+        val identifier: FilterIdentifier = route.identifier ?: filterRepo.generateIdentifier()
+
+        val originalConfig = filterRepo.currentConfigs().singleOrNull { it.identifier == identifier }
+
+        if (originalConfig == null && initialOptions == null) {
+            // Edit-by-identifier route landed on a config that no longer exists. Surface the
+            // error and unwind instead of crashing or rendering a phantom blank filter.
+            errorEvents.emit(IllegalStateException("Custom filter $identifier does not exist"))
+            navUp()
+            // Return a transient placeholder; the navUp will tear the screen down before this
+            // emission has any visible effect.
+            return@DynamicStateFlow State(
+                original = null,
+                current = CustomFilterConfig(identifier = identifier, label = ""),
+            )
+        }
+
+        val seedConfig = originalConfig ?: CustomFilterConfig(
+            identifier = identifier,
+            label = initialOptions!!.label ?: "",
+            areas = initialOptions.areas,
+            pathCriteria = initialOptions.pathCriteria,
+            nameCriteria = initialOptions.nameCriteria,
+        )
+
+        State(
+            original = originalConfig,
+            current = seedConfig,
+        )
+    }
+
+    val state: StateFlow<State?> = currentState.flow.safeStateIn(initialValue = null) { null }
+
+    init {
+        dataAreaManager.results
+            .onEach { areaResult ->
+                currentState.updateBlocking {
+                    areaResult.fold(
+                        onSuccess = { areaState ->
+                            copy(availableAreas = areaState.areas.map { it.type }.toSet(), areasUnavailable = false)
+                        },
+                        onFailure = { copy(areasUnavailable = true) },
+                    )
+                }
+            }
+            .launchIn(vmScope)
+    }
+
+    fun save() = launch {
+        log(TAG) { "save()" }
+        val toSave = currentState.value().current.copy(modifiedAt = Instant.now())
+        filterRepo.save(setOf(toSave))
+        if (routeFlow.value?.initial?.saveAsEnabled == true) {
+            settings.toggleCustomFilter(toSave.identifier, true)
+        }
+        navUp()
+    }
+
+    fun remove(confirmed: Boolean = false) = launch {
+        val snap = currentState.value()
+        log(TAG) { "remove() state=$snap" }
+        if (!snap.canRemove) return@launch
+
+        if (!confirmed) {
+            events.tryEmit(Event.RemoveConfirmation(snap.current))
+        } else {
+            filterRepo.remove(setOf(snap.current.identifier))
+            navUp()
+        }
+    }
+
+    fun cancel(confirmed: Boolean = false) = launch {
+        log(TAG) { "cancel()" }
+        val snap = currentState.value()
+        if ((snap.canSave || snap.hasUnchanged) && !confirmed) {
+            events.tryEmit(Event.UnsavedChangesConfirmation(snap.current))
+        } else {
+            navUp()
+        }
+    }
+
+    fun updateLabel(label: String) = launch {
+        currentState.updateBlocking {
+            copy(current = current.copy(label = label))
+        }
+    }
+
+    fun addPath(criterium: SegmentCriterium) = launch {
+        currentState.updateBlocking {
+            val new = (current.pathCriteria ?: emptySet()).toMutableSet().apply { add(criterium) }
+            copy(current = current.copy(pathCriteria = new))
+        }
+    }
+
+    fun removePath(criterium: SegmentCriterium) = launch {
+        currentState.updateBlocking {
+            val new = (current.pathCriteria ?: emptySet()).toMutableSet().apply { remove(criterium) }
+            copy(current = current.copy(pathCriteria = new.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun swapPath(old: SieveCriterium, new: SieveCriterium) = launch {
+        currentState.updateBlocking {
+            val swapped = swapPreservingOrder(current.pathCriteria, old, new)
+                .filterIsInstance<SegmentCriterium>()
+                .toCollection(LinkedHashSet())
+            copy(current = current.copy(pathCriteria = swapped.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun addNameContains(criterium: NameCriterium) = launch {
+        currentState.updateBlocking {
+            val new = (current.nameCriteria ?: emptySet()) + criterium
+            copy(current = current.copy(nameCriteria = new))
+        }
+    }
+
+    fun removeNameContains(criterium: NameCriterium) = launch {
+        currentState.updateBlocking {
+            val new = (current.nameCriteria ?: emptySet()) - criterium
+            copy(current = current.copy(nameCriteria = new.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun swapNameContains(old: SieveCriterium, new: SieveCriterium) = launch {
+        currentState.updateBlocking {
+            val swapped = swapPreservingOrder(current.nameCriteria, old, new)
+                .filterIsInstance<NameCriterium>()
+                .toCollection(LinkedHashSet())
+            copy(current = current.copy(nameCriteria = swapped.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun addExclusion(criterium: SegmentCriterium) = launch {
+        currentState.updateBlocking {
+            val new = (current.exclusionCriteria ?: emptySet()).toMutableSet().apply { add(criterium) }
+            copy(current = current.copy(exclusionCriteria = new))
+        }
+    }
+
+    fun removeExclusion(criterium: SegmentCriterium) = launch {
+        currentState.updateBlocking {
+            val new = (current.exclusionCriteria ?: emptySet()).toMutableSet().apply { remove(criterium) }
+            copy(current = current.copy(exclusionCriteria = new.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun swapExclusion(old: SieveCriterium, new: SieveCriterium) = launch {
+        currentState.updateBlocking {
+            val swapped = swapPreservingOrder(current.exclusionCriteria, old, new)
+                .filterIsInstance<SegmentCriterium>()
+                .toCollection(LinkedHashSet())
+            copy(current = current.copy(exclusionCriteria = swapped.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun toggleArea(type: DataArea.Type, checked: Boolean) = launch {
+        currentState.updateBlocking {
+            val new = (current.areas ?: emptySet()).toMutableSet().apply {
+                if (checked) add(type) else remove(type)
+            }
+            copy(current = current.copy(areas = new.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun toggleFileType(type: FileType) = launch {
+        currentState.updateBlocking {
+            val currentTypes = current.fileTypes
+            val newFileTypes = if (currentTypes?.contains(type) == true) {
+                currentTypes - type
+            } else if (currentTypes?.contains(type) == false) {
+                currentTypes + type
+            } else {
+                setOf(type)
+            }
+            copy(current = current.copy(fileTypes = newFileTypes.takeIf { it.isNotEmpty() }))
+        }
+    }
+
+    fun updateSizeMinimum(size: Long?) = launch {
+        currentState.updateBlocking { copy(current = current.copy(sizeMinimum = size)) }
+    }
+
+    fun updateSizeMaximum(size: Long?) = launch {
+        currentState.updateBlocking { copy(current = current.copy(sizeMaximum = size)) }
+    }
+
+    fun updateAgeMinimum(age: Duration?) = launch {
+        currentState.updateBlocking { copy(current = current.copy(ageMinimum = age)) }
+    }
+
+    fun updateAgeMaximum(age: Duration?) = launch {
+        currentState.updateBlocking { copy(current = current.copy(ageMaximum = age)) }
+    }
+
+    val liveSearch: StateFlow<LiveSearchState> = currentState.flow
+        .withPrevious()
+        .filter { (old, new) ->
+            if (old == null) return@filter true
+            // Don't restart live search if just the label changes
+            val old2 = old.copy(current = old.current.copy(label = ""))
+            val new2 = new.copy(current = new.current.copy(label = ""))
+            old2 != new2
+        }
+        .map { it.second }
+        .flatMapLatest { state ->
+            if (state.areasUnavailable) {
+                log(TAG) { "Live search: Skipping, data areas are unavailable" }
+                return@flatMapLatest flowOf(LiveSearchState(firstInit = true, areasUnavailable = true))
+            }
+            if (state.current.isUnderdefined) {
+                log(TAG) { "Live search: Skipping due to under defined config" }
+                return@flatMapLatest flowOf(LiveSearchState())
+            }
+            val config = state.current
+
+            val crawlerJobFlow = callbackFlow {
+                log(TAG) { "Crawler is starting for $config" }
+
+                val filter = filterFactory.create(config).apply { initialize() }
+                send(true)
+                crawler.crawl(setOf(filter))
+                send(false)
+
+                awaitClose { log(TAG) { "Crawler finished search" } }
+            }
+
+            combine(
+                crawler.matchEvents
+                    .map { LiveSearchMatch(lookup = it.match) }
+                    // Paired seen-set keeps the per-event dedup O(1); a list scan made large live
+                    // searches quadratic. Mutating the set inside scan is safe: accumulation is
+                    // sequential and downstream only reads the list.
+                    .scan(listOf<LiveSearchMatch>() to hashSetOf<String>()) { (list, seen), event ->
+                        if (seen.add(event.id)) (list + event) to seen else list to seen
+                    }
+                    .map { (list, _) -> list },
+                crawler.progress,
+                crawlerJobFlow,
+            ) { matches, progress, isWorking ->
+                LiveSearchState(matches, if (isWorking) progress else null)
+            }
+                .flowOn(dispatcherProvider.IO)
+                .throttleLatest(200)
+                // A failed search ends only itself, so the next config or area change starts a new one.
+                .catch { e ->
+                    currentCoroutineContext().ensureActive()
+                    log(TAG, WARN) { "Live search failed: ${e.asLog()}" }
+                    val failure = if (e is CancellationException) IllegalStateException("Live search failed", e) else e
+                    errorEvents.tryEmit(failure)
+                    emit(LiveSearchState(firstInit = true))
+                }
+        }
+        .onStart { emit(LiveSearchState(firstInit = true)) }
+        .safeStateIn(initialValue = LiveSearchState(firstInit = true)) { LiveSearchState(firstInit = true) }
+
+    data class State(
+        val original: CustomFilterConfig?,
+        val current: CustomFilterConfig,
+        val availableAreas: Set<DataArea.Type>? = null,
+        val areasUnavailable: Boolean = false,
+    ) {
+        val canRemove: Boolean = original != null
+        val canSave: Boolean = original != current && !current.isUnderdefined && current.label.isNotEmpty()
+        val hasUnchanged: Boolean = if (original != null) original != current else !current.isDefault
+    }
+
+    data class LiveSearchState(
+        val matches: List<LiveSearchMatch> = emptyList(),
+        val progress: Progress.Data? = null,
+        val firstInit: Boolean = false,
+        val areasUnavailable: Boolean = false,
+    )
+
+    sealed interface Event {
+        data class RemoveConfirmation(val config: CustomFilterConfig) : Event
+        data class UnsavedChangesConfirmation(val config: CustomFilterConfig) : Event
+    }
+
+    companion object {
+        private val TAG = logTag("SystemCleaner", "CustomFilter", "Editor", "ViewModel")
+    }
+}

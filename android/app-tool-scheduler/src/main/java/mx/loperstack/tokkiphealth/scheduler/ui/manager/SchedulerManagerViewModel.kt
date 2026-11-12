@@ -1,0 +1,379 @@
+package mx.loperstack.tokkiphealth.scheduler.ui.manager
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import mx.loperstack.tokkiphealth.common.BatteryHelper
+import mx.loperstack.tokkiphealth.common.WebpageTool
+import mx.loperstack.tokkiphealth.common.adb.AdbManager
+import mx.loperstack.tokkiphealth.common.adb.canUseAdbNow
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.asLog
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.flow.SingleEventFlow
+import mx.loperstack.tokkiphealth.common.hasApiLevel
+import mx.loperstack.tokkiphealth.common.navigation.routes.UpgradeRoute
+import mx.loperstack.tokkiphealth.common.root.RootManager
+import mx.loperstack.tokkiphealth.common.root.canUseRootNow
+import mx.loperstack.tokkiphealth.common.shell.ShellOps
+import mx.loperstack.tokkiphealth.common.shell.ipc.ShellOpsCmd
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.common.upgrade.UpgradeRepo
+import mx.loperstack.tokkiphealth.common.upgrade.isProForUi
+import mx.loperstack.tokkiphealth.main.core.GeneralSettings
+import mx.loperstack.tokkiphealth.main.core.taskmanager.AcsScheduleRisk
+import mx.loperstack.tokkiphealth.main.core.taskmanager.SchedulerAppCleanerAdvisor
+import mx.loperstack.tokkiphealth.scheduler.R
+import mx.loperstack.tokkiphealth.scheduler.core.Schedule
+import mx.loperstack.tokkiphealth.scheduler.core.ScheduleId
+import mx.loperstack.tokkiphealth.scheduler.core.SchedulerManager
+import mx.loperstack.tokkiphealth.scheduler.core.SchedulerSettings
+import mx.loperstack.tokkiphealth.scheduler.ui.ScheduleItemRoute
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
+
+@SuppressLint("StaticFieldLeak")
+@HiltViewModel
+class SchedulerManagerViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    dispatcherProvider: DispatcherProvider,
+    private val schedulerManager: SchedulerManager,
+    private val settings: SchedulerSettings,
+    private val generalSettings: GeneralSettings,
+    private val appCleanerAdvisor: SchedulerAppCleanerAdvisor,
+    private val upgradeRepo: UpgradeRepo,
+    private val rootManager: RootManager,
+    private val adbManager: AdbManager,
+    private val batteryHelper: BatteryHelper,
+    private val webpageTool: WebpageTool,
+    private val shellOps: ShellOps,
+) : ViewModel4(dispatcherProvider, tag = TAG) {
+
+    val events = SingleEventFlow<Event>()
+
+    private val fixInProgress = AtomicBoolean(false)
+
+    private val showBatteryOptimizationHint = combine(
+        batteryHelper.isIgnoringBatteryOptimizations,
+        settings.hintBatteryDismissed.flow,
+    ) { isIgnoring, isDismissed ->
+        !isDismissed && !isIgnoring
+    }
+
+    // Risk type to surface (NONE = hide), gated by everything except "is there an enabled AppCleaner schedule"
+    // (that part needs schedulerManager.state, resolved in the main combine).
+    private val acsScreenLockedRisk = combine(
+        appCleanerAdvisor.acsScheduleRisk,
+        settings.useAutomation.flow,
+        generalSettings.hasAcsConsent.flow,
+        settings.hintAcsScreenLockedDismissed.flow,
+    ) { risk, useAutomation, hasConsent, dismissed ->
+        resolveAcsScreenLockedHint(
+            risk = risk,
+            schedulerUsesAutomation = useAutomation,
+            hasAcsConsent = hasConsent == true,
+            hasEnabledAppCleanerSchedule = true,
+            dismissed = dismissed,
+        )
+    }
+
+    init {
+        // One-shot: create a default schedule the first time the screen opens with no entries.
+        schedulerManager.state
+            .take(1)
+            .onEach { state ->
+                if (state.schedules.isNotEmpty()) return@onEach
+                if (settings.createdDefaultEntry.value()) return@onEach
+
+                val defaultEntry = Schedule(
+                    id = UUID.randomUUID().toString(),
+                    label = context.getString(R.string.scheduler_schedule_default_name),
+                )
+                schedulerManager.saveSchedule(defaultEntry)
+                settings.createdDefaultEntry.value(true)
+            }
+            .launchInViewModel()
+
+        // One-shot: re-arm the battery hint if optimization is currently being ignored.
+        launch {
+            if (batteryHelper.isIgnoringBatteryOptimizations.first() && settings.hintBatteryDismissed.value()) {
+                log(TAG) { "Resetting hintBatteryDismissed to false" }
+                settings.hintBatteryDismissed.value(false)
+            }
+        }
+
+        // Re-arm the ACS screen-locked hint once the risky combination no longer applies, so a future
+        // reconfiguration surfaces it again instead of staying permanently dismissed. `dismissed` is intentionally
+        // excluded from the inputs (and not reset while the risk is active) so this never fights a fresh dismissal.
+        combine(
+            appCleanerAdvisor.acsScheduleRisk,
+            settings.useAutomation.flow,
+            generalSettings.hasAcsConsent.flow,
+            schedulerManager.state,
+        ) { risk, useAutomation, hasConsent, schedulerState ->
+            resolveAcsScreenLockedHint(
+                risk = risk,
+                schedulerUsesAutomation = useAutomation,
+                hasAcsConsent = hasConsent == true,
+                hasEnabledAppCleanerSchedule = schedulerState.schedules.any { it.isEnabled && it.useAppCleaner },
+                dismissed = false,
+            ) != AcsScheduleRisk.NONE
+        }
+            .distinctUntilChanged()
+            .onEach { riskActive ->
+                if (!riskActive && settings.hintAcsScreenLockedDismissed.value()) {
+                    log(TAG) { "Re-arming ACS screen-locked hint (risk no longer active)" }
+                    settings.hintAcsScreenLockedDismissed.value(false)
+                }
+            }
+            .launchInViewModel()
+    }
+
+    val state: StateFlow<State> = combine(
+        schedulerManager.state,
+        showBatteryOptimizationHint,
+        acsScreenLockedRisk,
+        rootManager.useRoot,
+        adbManager.useAdb,
+    ) { schedulerState, showBatteryHint, acsRisk, useRoot, useAdb ->
+        val sortedSchedules = schedulerState.schedules.sortedBy { it.label.lowercase() }
+        val showCommands = useRoot || useAdb
+        val acsScreenLockedRisk = if (sortedSchedules.any { it.isEnabled && it.useAppCleaner }) {
+            acsRisk
+        } else {
+            AcsScheduleRisk.NONE
+        }
+        State(
+            schedules = sortedSchedules,
+            showAlarmHint = sortedSchedules.any { it.isEnabled },
+            showBatteryHint = hasApiLevel(31) && showBatteryHint && sortedSchedules.any { it.isEnabled },
+            acsScreenLockedRisk = acsScreenLockedRisk,
+            showCommands = showCommands,
+            isLoading = false,
+        )
+    }.safeStateIn(
+        initialValue = State(),
+        onError = { State(isLoading = false) },
+    )
+
+    fun createNew() {
+        log(TAG) { "createNew()" }
+        navTo(ScheduleItemRoute(scheduleId = UUID.randomUUID().toString()))
+    }
+
+    fun editSchedule(id: ScheduleId) {
+        log(TAG) { "editSchedule($id)" }
+        navTo(ScheduleItemRoute(scheduleId = id))
+    }
+
+    fun removeSchedule(id: ScheduleId) = launch {
+        log(TAG) { "removeSchedule($id)" }
+        val live = schedulerManager.state.first().schedules.firstOrNull { it.id == id } ?: return@launch
+        if (live.isEnabled) {
+            log(TAG, WARN) { "removeSchedule: schedule $id is enabled, ignoring" }
+            return@launch
+        }
+        schedulerManager.removeSchedule(id)
+    }
+
+    fun toggleSchedule(id: ScheduleId) = launch {
+        log(TAG) { "toggleSchedule($id)" }
+        val live = schedulerManager.state.first().schedules.firstOrNull { it.id == id } ?: return@launch
+        if (!upgradeRepo.isProForUi()) {
+            navTo(UpgradeRoute())
+            return@launch
+        }
+        val enabling = !live.isEnabled
+        schedulerManager.saveSchedule(
+            live.copy(
+                scheduledAt = if (enabling) Instant.now() else null,
+                userZone = if (enabling) ZoneId.systemDefault().id else live.userZone,
+            ),
+        )
+    }
+
+    fun toggleCorpseFinder(id: ScheduleId) = launch { toggleTool(id) { it.copy(useCorpseFinder = !it.useCorpseFinder) } }
+
+    fun toggleSystemCleaner(id: ScheduleId) = launch { toggleTool(id) { it.copy(useSystemCleaner = !it.useSystemCleaner) } }
+
+    fun toggleAppCleaner(id: ScheduleId) = launch { toggleTool(id) { it.copy(useAppCleaner = !it.useAppCleaner) } }
+
+    private suspend fun toggleTool(id: ScheduleId, mutate: (Schedule) -> Schedule) {
+        val live = schedulerManager.state.first().schedules.firstOrNull { it.id == id } ?: return
+        // Tool toggles should not flip while the schedule is enabled — the row UI disables them,
+        // but a race between bind and click is possible.
+        if (live.isEnabled) {
+            log(TAG, WARN) { "toggleTool: schedule $id is enabled, ignoring" }
+            return
+        }
+        schedulerManager.saveSchedule(mutate(live))
+    }
+
+    fun requestEditCommands(id: ScheduleId) = launch {
+        log(TAG) { "requestEditCommands($id)" }
+        val live = schedulerManager.state.first().schedules.firstOrNull { it.id == id } ?: return@launch
+        events.emit(Event.EditCommands(id, live.commandsAfterSchedule.joinToString("\n")))
+    }
+
+    fun onBatteryIntentFailed(throwable: Throwable) {
+        log(TAG, WARN) { "onBatteryIntentFailed: $throwable" }
+        errorEvents.tryEmit(throwable)
+    }
+
+    fun dismissBatteryHint() = launch {
+        log(TAG) { "dismissBatteryHint()" }
+        settings.hintBatteryDismissed.value(true)
+    }
+
+    fun dismissAcsScreenLockedHint() = launch {
+        log(TAG) { "dismissAcsScreenLockedHint()" }
+        settings.hintAcsScreenLockedDismissed.value(true)
+    }
+
+    fun showHelp() {
+        log(TAG) { "showHelp()" }
+        webpageTool.open(HELP_URL)
+    }
+
+    fun updateCommandsAfterSchedule(id: ScheduleId, rawCmdInput: String) = launch {
+        log(TAG) { "updateCommandsAfterSchedule($id, $rawCmdInput)" }
+        val live = schedulerManager.state.first().schedules.firstOrNull { it.id == id } ?: return@launch
+        if (live.isEnabled) {
+            log(TAG, WARN) { "updateCommandsAfterSchedule: schedule $id is enabled, ignoring" }
+            return@launch
+        }
+        val cmds = rawCmdInput
+            .split("\n")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        log(TAG, INFO) { "New commands to execute after schedule: $cmds" }
+        schedulerManager.saveSchedule(live.copy(commandsAfterSchedule = cmds))
+    }
+
+    fun fixBatteryOptimization() = launch {
+        if (!fixInProgress.compareAndSet(false, true)) {
+            log(TAG) { "fixBatteryOptimization(): already in progress, ignoring" }
+            return@launch
+        }
+        try {
+            val modes = buildList {
+                if (rootManager.canUseRootNow()) add(ShellOps.Mode.ROOT)
+                if (adbManager.canUseAdbNow()) add(ShellOps.Mode.ADB)
+            }
+            val pkg = context.packageName
+            val cmd = ShellOpsCmd("/system/bin/cmd deviceidle whitelist +$pkg")
+
+            for (mode in modes) {
+                val result = try {
+                    withTimeoutOrNull(15_000L) { shellOps.execute(cmd, mode) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log(TAG, WARN) { "fixBatteryOptimization(mode=$mode) threw: ${e.asLog()}" }
+                    null
+                }
+
+                if (result != null && result.exitCode == 0) {
+                    log(TAG, INFO) { "fixBatteryOptimization(mode=$mode) exit=0, verifying…" }
+                    val verified = withTimeoutOrNull(5_000L) {
+                        batteryHelper.isIgnoringBatteryOptimizations.filter { it }.firstOrNull()
+                    } == true
+                    if (verified) {
+                        log(TAG, INFO) { "fixBatteryOptimization(mode=$mode) verified whitelisted" }
+                        return@launch
+                    }
+                    // Exit=0 but OS still says not-whitelisted (e.g. MIUI/ColorOS silently ignoring).
+                    // Another privileged mode running the same command won't help — go straight to Settings.
+                    log(TAG, WARN) { "fixBatteryOptimization(mode=$mode) exit=0 but OS still reports not-whitelisted; falling back" }
+                    break
+                } else {
+                    log(TAG, WARN) { "fixBatteryOptimization(mode=$mode) failed: $result" }
+                }
+            }
+
+            log(TAG) { "fixBatteryOptimization(): no privileged mode succeeded, opening settings" }
+            events.tryEmit(Event.ShowBatteryOptimizationSettings(batteryHelper.createIntent()))
+        } finally {
+            fixInProgress.set(false)
+        }
+    }
+
+    fun debugSchedule() = launch {
+        log(TAG) { "debugSchedule()" }
+        val id = UUID.randomUUID().toString()
+        val now = LocalTime.now().plusMinutes(1)
+        val testSchedule = Schedule(
+            id = id,
+            label = "Test Schedule $id",
+            hour = now.hour,
+            minute = now.minute,
+            repeatInterval = Duration.ofDays(1),
+            scheduledAt = Instant.now(),
+            userZone = ZoneId.systemDefault().id,
+        )
+        schedulerManager.saveSchedule(testSchedule)
+    }
+
+    data class State(
+        val schedules: List<Schedule> = emptyList(),
+        val showAlarmHint: Boolean = false,
+        val showBatteryHint: Boolean = false,
+        val acsScreenLockedRisk: AcsScheduleRisk = AcsScheduleRisk.NONE,
+        val showCommands: Boolean = false,
+        val isLoading: Boolean = true,
+    )
+
+    sealed interface Event {
+        data class EditCommands(val scheduleId: ScheduleId, val initialText: String) : Event
+        data class ShowBatteryOptimizationSettings(val intent: Intent) : Event
+    }
+
+    companion object {
+        private val TAG = logTag("Scheduler", "Manager", "ViewModel")
+        private const val HELP_URL = "https://sdmse.darken.eu/scheduler"
+    }
+}
+
+/**
+ * The screen-locked AppCleaner warning only makes sense when ACS is actually the active path AND the schedule will
+ * run it: ACS automation is needed ([risk] != NONE), the scheduler is allowed to use ACS, the user has consented to
+ * accessibility, an enabled schedule actually runs AppCleaner, and the hint hasn't been dismissed.
+ */
+internal fun resolveAcsScreenLockedHint(
+    risk: AcsScheduleRisk,
+    schedulerUsesAutomation: Boolean,
+    hasAcsConsent: Boolean,
+    hasEnabledAppCleanerSchedule: Boolean,
+    dismissed: Boolean,
+): AcsScheduleRisk = if (
+    risk == AcsScheduleRisk.NONE ||
+    !schedulerUsesAutomation ||
+    !hasAcsConsent ||
+    !hasEnabledAppCleanerSchedule ||
+    dismissed
+) {
+    AcsScheduleRisk.NONE
+} else {
+    risk
+}

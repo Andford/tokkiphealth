@@ -1,0 +1,212 @@
+package mx.loperstack.tokkiphealth.analyzer.ui.storage.storage
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.twotone.ArrowBack
+import androidx.compose.material.icons.twotone.Refresh
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmScaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import mx.loperstack.tokkiphealth.analyzer.R
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.OtherUsersCategory
+import mx.loperstack.tokkiphealth.analyzer.ui.StorageContentRoute
+import mx.loperstack.tokkiphealth.analyzer.ui.storage.storage.categories.AppCategoryCard
+import mx.loperstack.tokkiphealth.analyzer.ui.storage.storage.categories.MediaCategoryCard
+import mx.loperstack.tokkiphealth.analyzer.ui.storage.storage.categories.OtherUsersCategoryCard
+import mx.loperstack.tokkiphealth.analyzer.ui.storage.storage.categories.SystemCategoryCard
+import mx.loperstack.tokkiphealth.common.coil.AppIconExtraSlot
+import mx.loperstack.tokkiphealth.common.compose.layout.ScrollAwareFab
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmListDefaults
+import mx.loperstack.tokkiphealth.common.compose.layout.SdmTooltipIconButton
+import mx.loperstack.tokkiphealth.common.compose.layout.plusBottom
+import mx.loperstack.tokkiphealth.common.compose.preview.Preview2
+import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
+import mx.loperstack.tokkiphealth.common.compose.progress.ProgressOverlay
+import mx.loperstack.tokkiphealth.common.error.ErrorEventHandler
+import mx.loperstack.tokkiphealth.common.getSpanCount
+import mx.loperstack.tokkiphealth.common.navigation.NavigationEventHandler
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+
+@Composable
+fun StorageContentScreenHost(
+    route: StorageContentRoute,
+    vm: StorageContentViewModel = hiltViewModel(),
+) {
+    ErrorEventHandler(vm)
+    NavigationEventHandler(vm)
+
+    LaunchedEffect(route) { vm.bindRoute(route) }
+
+    StorageContentScreen(
+        stateSource = vm.state,
+        onCategoryClick = vm::onCategoryClick,
+        onUserClick = vm::onUserClick,
+        onNavigateBack = vm::onNavigateBack,
+        onExitNotFound = vm::exitOnNotFound,
+        onRefresh = vm::refresh,
+    )
+}
+
+@Composable
+internal fun StorageContentScreen(
+    stateSource: Flow<StorageContentViewModel.State> = MutableStateFlow(StorageContentViewModel.State.Loading),
+    onCategoryClick: (StorageContentViewModel.Row) -> Unit = {},
+    onUserClick: (OtherUsersCategory.UserEntry) -> Unit = {},
+    onNavigateBack: () -> Unit = {},
+    onExitNotFound: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+) {
+    val state by stateSource.collectAsStateWithLifecycle(initialValue = StorageContentViewModel.State.Loading)
+    val context = LocalContext.current
+    val gridState = rememberLazyGridState()
+
+    BackHandler(enabled = true) { onNavigateBack() }
+
+    when (val s = state) {
+        StorageContentViewModel.State.NotFound -> {
+            LaunchedEffect(Unit) { onExitNotFound() }
+            SdmScaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(stringResource(R.string.analyzer_storage_content_title)) },
+                        navigationIcon = {
+                            SdmTooltipIconButton(
+                                icon = Icons.AutoMirrored.TwoTone.ArrowBack,
+                                label = stringResource(mx.loperstack.tokkiphealth.common.R.string.general_navigate_up_action),
+                                onClick = onNavigateBack,
+                            )
+                        },
+                    )
+                },
+            ) { _ -> }
+        }
+
+        StorageContentViewModel.State.Loading -> {
+            SdmScaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(stringResource(R.string.analyzer_storage_content_title)) },
+                        navigationIcon = {
+                            SdmTooltipIconButton(
+                                icon = Icons.AutoMirrored.TwoTone.ArrowBack,
+                                label = stringResource(mx.loperstack.tokkiphealth.common.R.string.general_navigate_up_action),
+                                onClick = onNavigateBack,
+                            )
+                        },
+                    )
+                },
+            ) { paddingValues ->
+                ProgressOverlay(
+                    data = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                ) { }
+            }
+        }
+
+        is StorageContentViewModel.State.Ready -> {
+            SdmScaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(stringResource(R.string.analyzer_storage_content_title))
+                                Text(
+                                    text = s.storage.label.get(context),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            SdmTooltipIconButton(
+                                icon = Icons.AutoMirrored.TwoTone.ArrowBack,
+                                label = stringResource(mx.loperstack.tokkiphealth.common.R.string.general_navigate_up_action),
+                                onClick = onNavigateBack,
+                            )
+                        },
+                    )
+                },
+                floatingActionButton = {
+                    ScrollAwareFab(scrollState = gridState, visible = s.progress == null) {
+                        FloatingActionButton(onClick = onRefresh) {
+                            Icon(
+                                Icons.TwoTone.Refresh,
+                                contentDescription = stringResource(mx.loperstack.tokkiphealth.common.R.string.general_refresh_action),
+                            )
+                        }
+                    }
+                },
+            ) { paddingValues ->
+                ProgressOverlay(
+                    data = s.progress,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    extraSlot = AppIconExtraSlot,
+                ) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(context.getSpanCount()),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            .plusBottom(SdmListDefaults.FabClearance),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(s.rows.orEmpty(), key = { it::class.java.name }) { row ->
+                            when (row) {
+                                is StorageContentViewModel.Row.Apps -> AppCategoryCard(
+                                    row = row,
+                                    onClick = { onCategoryClick(row) },
+                                )
+                                is StorageContentViewModel.Row.Media -> MediaCategoryCard(
+                                    row = row,
+                                    onClick = { onCategoryClick(row) },
+                                )
+                                is StorageContentViewModel.Row.System -> SystemCategoryCard(
+                                    row = row,
+                                    onClick = { onCategoryClick(row) },
+                                )
+                                is StorageContentViewModel.Row.OtherUsers -> OtherUsersCategoryCard(
+                                    row = row,
+                                    onUserClick = onUserClick,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Preview2
+@Composable
+private fun StorageContentScreenLoadingPreview() {
+    PreviewWrapper {
+        StorageContentScreen()
+    }
+}

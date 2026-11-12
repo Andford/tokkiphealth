@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Healthy PC's mint, behind Tokkip. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="315" android:startColor="#7BE6A8" android:endColor="#3FD9C0" />
+</shape>

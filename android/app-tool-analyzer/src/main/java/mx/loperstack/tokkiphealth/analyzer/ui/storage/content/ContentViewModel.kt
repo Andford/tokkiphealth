@@ -1,0 +1,399 @@
+package mx.loperstack.tokkiphealth.analyzer.ui.storage.content
+
+import android.content.Intent
+import dagger.hilt.android.lifecycle.HiltViewModel
+import mx.loperstack.tokkiphealth.analyzer.R
+import mx.loperstack.tokkiphealth.analyzer.core.Analyzer
+import mx.loperstack.tokkiphealth.analyzer.core.AnalyzerSettings
+import mx.loperstack.tokkiphealth.analyzer.core.content.ContentDeleteTask
+import mx.loperstack.tokkiphealth.analyzer.core.content.ContentGroup
+import mx.loperstack.tokkiphealth.analyzer.core.content.ContentItem
+import mx.loperstack.tokkiphealth.analyzer.core.device.DeviceStorage
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.AppCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.OtherUsersCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.SystemCategory
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.isContentReadOnly
+import mx.loperstack.tokkiphealth.analyzer.core.storage.categories.ownsGroup
+import mx.loperstack.tokkiphealth.analyzer.core.storage.findContent
+import mx.loperstack.tokkiphealth.analyzer.ui.ContentRoute
+import mx.loperstack.tokkiphealth.analyzer.ui.storage.computeSizeBarRatio
+import mx.loperstack.tokkiphealth.common.ViewIntentTool
+import mx.loperstack.tokkiphealth.common.ca.CaString
+import mx.loperstack.tokkiphealth.common.ca.toCaString
+import mx.loperstack.tokkiphealth.common.coroutine.DispatcherProvider
+import mx.loperstack.tokkiphealth.common.datastore.value
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.INFO
+import mx.loperstack.tokkiphealth.common.debug.logging.Logging.Priority.WARN
+import mx.loperstack.tokkiphealth.common.debug.logging.log
+import mx.loperstack.tokkiphealth.common.debug.logging.logTag
+import mx.loperstack.tokkiphealth.common.files.APath
+import mx.loperstack.tokkiphealth.common.files.APathLookup
+import mx.loperstack.tokkiphealth.common.files.FileType
+import mx.loperstack.tokkiphealth.common.files.FilterEditorOptionsCreator
+import mx.loperstack.tokkiphealth.common.files.SwiperSessionCreator
+import mx.loperstack.tokkiphealth.common.filter.CustomFilterEditorOptions
+import mx.loperstack.tokkiphealth.common.filter.CustomFilterEditorRoute
+import mx.loperstack.tokkiphealth.common.flow.SingleEventFlow
+import mx.loperstack.tokkiphealth.common.navigation.routes.UpgradeRoute
+import mx.loperstack.tokkiphealth.common.progress.Progress
+import mx.loperstack.tokkiphealth.common.ui.LayoutMode
+import mx.loperstack.tokkiphealth.common.uix.ViewModel4
+import mx.loperstack.tokkiphealth.common.upgrade.UpgradeRepo
+import mx.loperstack.tokkiphealth.common.upgrade.isProForUi
+import mx.loperstack.tokkiphealth.exclusion.core.ExclusionManager
+import mx.loperstack.tokkiphealth.exclusion.core.types.PathExclusion
+import mx.loperstack.tokkiphealth.exclusion.ui.PathExclusionEditorRoute
+import mx.loperstack.tokkiphealth.exclusion.ui.editor.path.PathExclusionEditorOptions
+import mx.loperstack.tokkiphealth.main.core.taskmanager.TaskSubmitter
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.combineTransform
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import javax.inject.Inject
+
+@HiltViewModel
+class ContentViewModel @Inject constructor(
+    dispatcherProvider: DispatcherProvider,
+    private val analyzer: Analyzer,
+    private val analyzerSettings: AnalyzerSettings,
+    private val viewIntentTool: ViewIntentTool,
+    private val exclusionManager: ExclusionManager,
+    private val filterEditorOptionsCreator: FilterEditorOptionsCreator,
+    private val upgradeRepo: UpgradeRepo,
+    private val swiperSessionCreator: SwiperSessionCreator,
+    private val taskSubmitter: TaskSubmitter,
+) : ViewModel4(dispatcherProvider, tag = TAG) {
+
+    private val routeFlow = MutableStateFlow<ContentRoute?>(null)
+    private val navigationState = MutableStateFlow<List<APath>?>(null)
+
+    val events = SingleEventFlow<Event>()
+
+    fun bindRoute(route: ContentRoute) {
+        if (routeFlow.value != null) return
+        log(TAG, INFO) { "bindRoute(${route.groupId}, installId=${route.installId})" }
+        routeFlow.value = route
+    }
+
+    init {
+        // Process-death handler.
+        routeFlow
+            .filterNotNull()
+            .flatMapLatest { route ->
+                analyzer.data
+                    .filter { it.findContentGroup(route) == null }
+                    .take(1)
+                    .onEach {
+                        log(TAG, WARN) { "Can't find ${route.groupId}" }
+                        navUp()
+                    }
+            }
+            .launchInViewModel()
+    }
+
+    private fun Analyzer.Data.findContentGroup(route: ContentRoute): ContentGroup? = groups[route.groupId]
+
+    private fun Analyzer.Data.isSystemGroup(route: ContentRoute): Boolean {
+        return categories[route.storageId]
+            ?.any { it is SystemCategory && it.ownsGroup(route.groupId) }
+            ?: false
+    }
+
+    private fun Analyzer.Data.isOtherUserGroup(route: ContentRoute): Boolean {
+        return categories[route.storageId]
+            ?.any { it is OtherUsersCategory && it.ownsGroup(route.groupId) }
+            ?: false
+    }
+
+    private fun Analyzer.Data.isReadOnlyGroup(route: ContentRoute): Boolean {
+        return categories[route.storageId]
+            ?.any { it.ownsGroup(route.groupId) && it.isContentReadOnly }
+            ?: false
+    }
+
+    val state: StateFlow<State> = routeFlow
+        .filterNotNull()
+        .flatMapLatest { route ->
+            // Item production excludes progress so high-frequency progress ticks during a scan don't
+            // re-sort the current folder level. Progress is merged in the outer combine (below) as a
+            // cheap field swap that preserves the items List instance, letting keyed lazy rows skip.
+            val content = combineTransform(
+                analyzer.data,
+                navigationState,
+                analyzerSettings.contentLayoutMode.flow,
+            ) { data, navLevels, layoutMode ->
+                val storage = data.storages.firstOrNull { it.id == route.storageId }
+                val contentGroup = data.findContentGroup(route)
+                if (storage == null || contentGroup == null) {
+                    emit(State.NotFound)
+                    return@combineTransform
+                }
+                val isReadOnly = data.isReadOnlyGroup(route)
+                val isSystemGroup = data.isSystemGroup(route)
+                val isOtherUserGroup = data.isOtherUserGroup(route)
+                val pkgStat = route.installId?.let { installId ->
+                    data.categories[route.storageId]
+                        ?.filterIsInstance<AppCategory>()?.singleOrNull()
+                        ?.pkgStats?.get(installId)
+                }
+                val currentLevel = contentGroup.contents.findContent { it.path == navLevels?.last() }
+                val title = pkgStat?.label ?: contentGroup.label
+                val subtitle = when {
+                    currentLevel != null -> currentLevel.label
+                    pkgStat?.label == null -> null
+                    else -> contentGroup.label
+                }
+                val infoBanner: CaString? = when {
+                    // System content: top-level banner only, mirroring the system category presentation.
+                    isSystemGroup -> R.string.analyzer_storage_content_type_system_info.toCaString()
+                        .takeIf { currentLevel == null }
+                    // Another user's storage: read-only for a different reason than degraded media,
+                    // so it must not inherit the media wording below.
+                    isOtherUserGroup -> R.string.analyzer_storage_content_type_otherusers_info.toCaString()
+                    // Degraded read-only media: keep the banner visible while browsing too, since the group is a
+                    // single storage-root item the user must open before seeing any folders.
+                    isReadOnly -> R.string.analyzer_storage_content_type_media_readonly_info.toCaString()
+                    else -> null
+                }
+                // Only real directories can be handed to a file manager, onItemClick also navigates
+                // into symlinks and unknown types.
+                val externalFolder = currentLevel
+                    ?.takeIf { it.type == FileType.DIRECTORY }
+                    ?.path
+                    ?.takeIf { viewIntentTool.canOpenFolder(it) }
+
+                // Loading frame: no items yet (progress stamped by the outer combine).
+                emit(
+                    State.Ready(
+                        title = title,
+                        subtitle = subtitle,
+                        storage = storage,
+                        items = null,
+                        layoutMode = layoutMode,
+                        progress = null,
+                        isReadOnly = isReadOnly,
+                        infoBanner = infoBanner,
+                        externalFolder = externalFolder,
+                    ),
+                )
+
+                val siblings = currentLevel?.children ?: contentGroup.contents
+                val maxSiblingSize = siblings.mapNotNull { it.size }.maxOrNull()
+                val sortedItems = siblings
+                    .sortedByDescending { it.size }
+                    .map { content ->
+                        Item(
+                            parent = currentLevel,
+                            content = content,
+                            sizeRatio = computeSizeBarRatio(content.size, maxSiblingSize),
+                        )
+                    }
+
+                emit(
+                    State.Ready(
+                        title = title,
+                        subtitle = subtitle,
+                        storage = storage,
+                        items = sortedItems,
+                        layoutMode = layoutMode,
+                        progress = null,
+                        isReadOnly = isReadOnly,
+                        infoBanner = infoBanner,
+                        externalFolder = externalFolder,
+                    ),
+                )
+            }
+
+            combine(content, analyzer.progress) { base, progress ->
+                if (base is State.Ready) base.copy(progress = progress) else base
+            }
+        }
+        .safeStateIn(initialValue = State.Loading, onError = { State.NotFound })
+
+    fun onItemClick(item: Item) = launch {
+        val content = item.content
+        when (content.type) {
+            FileType.FILE -> {
+                val lookup = content.lookup
+                if (lookup != null) {
+                    open(lookup)
+                } else {
+                    log(TAG) { "Content has no lookup, can't open: $content" }
+                }
+            }
+            else -> if (content.inaccessible) {
+                log(TAG) { "No details available for $content" }
+                events.emit(Event.ShowNoAccessHint(content))
+            } else {
+                navigationState.value = (navigationState.value ?: emptyList()).plus(content.path)
+            }
+        }
+    }
+
+    private fun open(lookup: APathLookup<*>) = launch {
+        log(TAG) { "open(): Opening $lookup" }
+        val intent = viewIntentTool.create(lookup)
+        if (intent == null) {
+            log(TAG, WARN) { "open(): Unable to create view intent for $lookup" }
+            return@launch
+        }
+        events.emit(Event.OpenContent(intent))
+    }
+
+    fun onOpenExternally(path: APath) = launch {
+        log(TAG) { "onOpenExternally($path)" }
+        val intent = viewIntentTool.createForFolder(path)
+        if (intent == null) {
+            log(TAG, WARN) { "onOpenExternally(): No intent for $path" }
+            events.emit(Event.NoExternalAppFound)
+            return@launch
+        }
+        events.emit(Event.OpenContent(intent))
+    }
+
+    fun onNavigateBack() {
+        log(TAG) { "onNavigateBack()" }
+        navigationState.value?.let { cur ->
+            navigationState.value = cur.dropLast(1).takeIf { it.isNotEmpty() }
+        } ?: run { navUp() }
+    }
+
+    fun onDeleteSelected(items: Set<ContentItem>) = launch {
+        val route = routeFlow.value ?: return@launch
+        log(TAG) { "onDeleteSelected(): ${items.size}" }
+        val data = analyzer.data.first()
+        if (data.isReadOnlyGroup(route)) {
+            log(TAG, WARN) { "delete(): Blocked — content is read-only" }
+            return@launch
+        }
+        val targets = items.map { it.path }.toSet()
+        if (targets.isEmpty()) return@launch
+        val task = ContentDeleteTask(
+            storageId = route.storageId,
+            groupId = route.groupId,
+            targetPkg = route.installId,
+            targets = targets,
+        )
+        // Routed through the TaskSubmitter, not the Analyzer directly: ContentDeleteTask is Reportable,
+        // and only the task manager reports completed tasks to the stats repo.
+        val result = taskSubmitter.submit(task) as ContentDeleteTask.Result
+        events.emit(Event.ContentDeleted(result.affectedCount, result.affectedSpace))
+    }
+
+    fun onExcludeSelected(items: Set<ContentItem>) = launch {
+        val route = routeFlow.value ?: return@launch
+        log(TAG) { "onExcludeSelected(): ${items.size}" }
+        if (analyzer.data.first().isReadOnlyGroup(route)) {
+            log(TAG, WARN) { "exclude(): Blocked — content is read-only" }
+            return@launch
+        }
+        val newExclusions = items.map { PathExclusion(path = it.path) }.toSet()
+        if (newExclusions.isEmpty()) return@launch
+        exclusionManager.save(newExclusions)
+        val affected = newExclusions.map { excl -> items.single { it.path == excl.path } }
+        events.emit(Event.ExclusionsCreated(affected))
+    }
+
+    fun onCreateFilter(items: Set<ContentItem>) = launch {
+        val route = routeFlow.value ?: return@launch
+        log(TAG) { "onCreateFilter(): ${items.size}" }
+        if (analyzer.data.first().isReadOnlyGroup(route)) {
+            log(TAG, WARN) { "createFilter(): Blocked — content is read-only" }
+            return@launch
+        }
+        if (!upgradeRepo.isProForUi()) {
+            log(TAG) { "Not PRO, redirecting to upgrade screen." }
+            navTo(UpgradeRoute())
+            return@launch
+        }
+        val targets = items.mapNotNull { it.lookup }.toSet()
+        if (targets.isEmpty()) return@launch
+        val options = filterEditorOptionsCreator.createOptions(targets)
+        navTo(CustomFilterEditorRoute(initial = options as CustomFilterEditorOptions))
+    }
+
+    fun onCreateSwiperSession(items: Set<ContentItem>) = launch {
+        val route = routeFlow.value ?: return@launch
+        log(TAG) { "onCreateSwiperSession(): ${items.size}" }
+        if (analyzer.data.first().isReadOnlyGroup(route)) {
+            log(TAG, WARN) { "createSwiperSession(): Blocked — content is read-only" }
+            return@launch
+        }
+        val paths = items
+            .filter { !it.inaccessible }
+            .map { it.path }
+            .toSet()
+        if (paths.isEmpty()) {
+            log(TAG, WARN) { "createSwiperSession(): No accessible items to create session" }
+            return@launch
+        }
+        when (val result = swiperSessionCreator.createSession(paths)) {
+            is SwiperSessionCreator.Result.Created -> {
+                log(TAG) { "createSwiperSession(): Created session ${result.sessionId} with ${paths.size} paths" }
+                events.emit(Event.SwiperSessionCreated(result.sessionId, paths.size))
+            }
+            SwiperSessionCreator.Result.LimitReached -> {
+                log(TAG) { "createSwiperSession(): Session limit reached, redirecting to upgrade screen." }
+                navTo(UpgradeRoute())
+            }
+        }
+    }
+
+    fun onOpenExclusion(item: ContentItem) {
+        log(TAG) { "openExclusion(${item.path})" }
+        navTo(
+            PathExclusionEditorRoute(
+                initial = PathExclusionEditorOptions(targetPath = item.path),
+            ),
+        )
+    }
+
+    fun onLayoutModeToggle() = launch {
+        log(TAG) { "onLayoutModeToggle()" }
+        when (analyzerSettings.contentLayoutMode.value()) {
+            LayoutMode.LINEAR -> analyzerSettings.contentLayoutMode.value(LayoutMode.GRID)
+            LayoutMode.GRID -> analyzerSettings.contentLayoutMode.value(LayoutMode.LINEAR)
+        }
+    }
+
+    data class Item(
+        val parent: ContentItem?,
+        val content: ContentItem,
+        val sizeRatio: Float?,
+    )
+
+    sealed interface State {
+        data object Loading : State
+        data class Ready(
+            val title: CaString?,
+            val subtitle: CaString?,
+            val storage: DeviceStorage,
+            val items: List<Item>?,
+            val layoutMode: LayoutMode,
+            val progress: Progress.Data?,
+            val isReadOnly: Boolean,
+            val infoBanner: CaString?,
+            val externalFolder: APath?,
+        ) : State
+        data object NotFound : State
+    }
+
+    sealed interface Event {
+        data class ShowNoAccessHint(val item: ContentItem) : Event
+        data class ExclusionsCreated(val items: List<ContentItem>) : Event
+        data class ContentDeleted(val count: Int, val freedSpace: Long) : Event
+        data class OpenContent(val intent: Intent) : Event
+        data object NoExternalAppFound : Event
+        data class SwiperSessionCreated(val sessionId: String, val itemCount: Int) : Event
+    }
+
+    companion object {
+        private val TAG = logTag("Analyzer", "Content", "ViewModel")
+    }
+}
