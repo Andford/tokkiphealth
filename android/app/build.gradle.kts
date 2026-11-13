@@ -35,6 +35,8 @@ android {
         testInstrumentationRunnerArguments["clearPackageData"] = "true"
 
         buildConfigField("String", "PACKAGENAME", "\"${projectConfig.packageName}\"")
+        // No flavors: Tokkip Health is the FOSS build (BuildConfigWrap reads this).
+        buildConfigField("String", "FLAVOR", "\"foss\"")
         buildConfigField("String", "GITSHA", "\"${commitHashProvider.get()}\"")
         buildConfigField("String", "VERSION_CODE", "\"${projectConfig.version.code}\"")
         buildConfigField("String", "VERSION_NAME", "\"${projectConfig.version.name}\"")
