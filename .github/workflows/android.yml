@@ -74,5 +74,22 @@ jobs:
           set -o pipefail
           ./gradlew testDebugUnitTest --continue --console=plain 2>&1 | tee "$RUNNER_TEMP/test.log" || {
             grep -E '^e: |FAILED|What went wrong' -A2 "$RUNNER_TEMP/test.log" | head -60 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "=== First lines of each failure (deepest cause) ==="
+            for f in */build/test-results/*/*.xml; do
+              grep -q '<failure' "$f" || continue
+              echo "## $f"
+              python3 - "$f" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          seen = set()
+          for tc in ET.parse(sys.argv[1]).getroot().iter('testcase'):
+              for fl in tc.findall('failure'):
+                  lines = (fl.text or '').splitlines()
+                  causes = [l for l in lines if l.startswith('Caused by') or (l and not l.startswith('\t') and not l.startswith(' '))]
+                  key = causes[-1] if causes else lines[0]
+                  if key in seen: continue
+                  seen.add(key)
+                  print(tc.get('name')); print('\n'.join(lines[:3])); print('\n'.join(causes[-2:])); print('---')
+          PY
+            done
             exit 1
           }
