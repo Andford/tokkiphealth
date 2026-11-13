@@ -18,6 +18,11 @@ android {
     }
 
     setupCompileOptions()
+
+    // Tokkip is written for Android 11+ (the Pixel); his haptics guard themselves.
+    lint {
+        disable += setOf("NewApi")
+    }
 }
 
 setupKotlinOptions(compose = true)

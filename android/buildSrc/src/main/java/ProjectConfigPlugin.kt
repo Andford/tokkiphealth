@@ -6,7 +6,7 @@ import java.util.Properties
 
 open class ProjectConfig {
     val packageName = "mx.loperstack.tokkiphealth"
-    val minSdk = 30
+    val minSdk = 26
 
     val compileSdk = 36
     val compileSdkPreview: String? = null
