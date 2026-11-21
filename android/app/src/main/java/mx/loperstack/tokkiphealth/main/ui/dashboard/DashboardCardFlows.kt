@@ -46,6 +46,8 @@ import mx.loperstack.tokkiphealth.squeezer.core.Squeezer
 import mx.loperstack.tokkiphealth.squeezer.core.tasks.SqueezerProcessTask
 import mx.loperstack.tokkiphealth.squeezer.ui.SqueezerSetupRoute
 import mx.loperstack.tokkiphealth.stats.core.LowStorage
+import mx.loperstack.tokkiphealth.stats.core.Report
+import mx.loperstack.tokkiphealth.stats.core.StatsRepo
 import mx.loperstack.tokkiphealth.stats.core.SpaceTracker
 import mx.loperstack.tokkiphealth.stats.core.db.SpaceSnapshotEntity
 import mx.loperstack.tokkiphealth.stats.core.forecast.StorageForecaster
@@ -57,6 +59,7 @@ import mx.loperstack.tokkiphealth.systemcleaner.core.tasks.SystemCleanerProcessi
 import mx.loperstack.tokkiphealth.systemcleaner.core.tasks.SystemCleanerScanTask
 import mx.loperstack.tokkiphealth.systemcleaner.ui.FilterContentDetailsRoute
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -104,8 +107,9 @@ internal fun DashboardViewModel.buildUpdateInfo(): Flow<UpdateDashboardCardItem?
 internal fun DashboardViewModel.buildTitleCardItem(): Flow<TitleDashboardCardItem> = combine(
     upgradeInfo,
     taskManager.state,
-    statsRepo.state,
-    statsRepo.reports,
+    // The stats may arrive late (or never, if their database is busy): the card shows meanwhile.
+    statsRepo.state.map<StatsRepo.State, StatsRepo.State?> { it }.onStart { emit(null) }.catch { emit(null) },
+    statsRepo.reports.map<Collection<Report>, Collection<Report>> { it }.onStart { emit(emptyList()) }.catch { emit(emptyList()) },
 ) { upgradeInfo, taskState, stats, reports ->
     // The phone's own storage (/data), read fresh whenever a task or a report changes.
     val (total, free) = try {
@@ -122,7 +126,7 @@ internal fun DashboardViewModel.buildTitleCardItem(): Flow<TitleDashboardCardIte
         storageTotal = total,
         storageFree = free,
         lastCleanAt = lastClean,
-        totalFreed = stats.totalSpaceFreed,
+        totalFreed = stats?.totalSpaceFreed ?: 0L,
         now = java.time.Instant.now(),
     )
     // Tokkip (the app) hears about it too, when there's news.
