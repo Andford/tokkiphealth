@@ -421,4 +421,23 @@
     </plurals>
     <string name="settings_acknowledgements_sdmaid_body">Tokkip Health está hecho sobre SD Maid SE, de Matthias Urhahn (darken), bajo la GPL-3.0. ¡Gracias!</string>
     <string name="settings_acknowledgements_tokkip_body">Tokkip, su forma y sus sonidos son de LoperStack, los mismos de Tokkip y Healthy PC.</string>
+    <string name="dashboard_health_eyebrow">La salud de tu teléfono</string>
+    <string name="dashboard_health_looking">Revisando tu teléfono…</string>
+    <string name="dashboard_health_mood_happy">Tu teléfono se siente de maravilla</string>
+    <string name="dashboard_health_mood_calm">Tu teléfono va bien</string>
+    <string name="dashboard_health_mood_tired">Tu teléfono se está cansando</string>
+    <string name="dashboard_health_mood_dizzy">Tu teléfono anda mareado</string>
+    <string name="dashboard_health_summary_ok">Hay espacio de sobra y está limpio. Hoy no hay nada que hacer.</string>
+    <string name="dashboard_health_summary_full">Tu teléfono está casi lleno. Una limpieza le va a dar aire.</string>
+    <string name="dashboard_health_summary_clean">Ya tiene rato desde la última limpieza. ¿Vemos qué se puede ir?</string>
+    <string name="dashboard_health_summary_filling">Tu almacenamiento se está llenando. Una limpieza le va a ayudar.</string>
+    <string name="dashboard_health_score_desc">Salud: %1$d de 100</string>
+    <string name="dashboard_health_stat_free_label">Espacio libre</string>
+    <string name="dashboard_health_stat_free_value">%1$s de %2$s</string>
+    <string name="dashboard_health_stat_clean_label">Última limpieza</string>
+    <string name="dashboard_health_stat_clean_never">Todavía no</string>
+    <string name="dashboard_health_stat_clean_now">Ahorita</string>
+    <string name="dashboard_health_stat_freed_label">Liberado con Tokkip</string>
+    <string name="dashboard_health_action">Revisar mi teléfono</string>
+    <string name="dashboard_health_working">Trabajando…</string>
 </resources>

@@ -38,6 +38,7 @@ import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.SetupDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.SqueezerDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.StatsDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.TitleDashboardCardItem
+import mx.loperstack.tokkiphealth.main.core.health.PhoneHealth
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.ToolDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.UpdateDashboardCardItem
 import mx.loperstack.tokkiphealth.setup.SetupRoute
@@ -103,13 +104,36 @@ internal fun DashboardViewModel.buildUpdateInfo(): Flow<UpdateDashboardCardItem?
 internal fun DashboardViewModel.buildTitleCardItem(): Flow<TitleDashboardCardItem> = combine(
     upgradeInfo,
     taskManager.state,
-) { upgradeInfo, taskState ->
+    statsRepo.state,
+    statsRepo.reports,
+) { upgradeInfo, taskState, stats, reports ->
+    // The phone's own storage (/data), read fresh whenever a task or a report changes.
+    val (total, free) = try {
+        val fs = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+        fs.totalBytes to fs.availableBytes
+    } catch (e: Exception) {
+        0L to 0L
+    }
+    val lastClean = reports
+        .filter { (it.affectedSpace ?: 0L) > 0L }
+        .maxOfOrNull { it.endAt }
     TitleDashboardCardItem(
         upgradeInfo = upgradeInfo,
         webpageTool = webpageTool,
         isWorking = !taskState.isIdle,
+        health = PhoneHealth.assess(
+            storageTotal = total,
+            storageFree = free,
+            lastCleanAt = lastClean,
+            totalFreed = stats.totalSpaceFreed,
+            now = java.time.Instant.now(),
+        ),
         onRibbonClicked = { webpageTool.open(SdmSeLinks.ISSUES) },
-        onMascotTriggered = { easterEggTriggered.value = it }
+        onMascotTriggered = { easterEggTriggered.value = it },
+        onClean = {
+            val action = bottomBarState.value?.actionState ?: BottomBarState.Action.SCAN
+            mainAction(action)
+        },
     )
 }
 

@@ -1,80 +1,66 @@
 package mx.loperstack.tokkiphealth.main.ui.dashboard.cards
 
-import androidx.annotation.StringRes
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import android.text.format.DateUtils
+import android.text.format.Formatter
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.twotone.BugReport
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import mx.loperstack.tokkiphealth.common.BuildConfigWrap
-import mx.loperstack.tokkiphealth.common.R as CommonR
+import mx.loperstack.tokkip.character.Mood
+import mx.loperstack.tokkip.character.Tokkip
+import mx.loperstack.tokkip.character.TokkipEngine
+import mx.loperstack.tokkiphealth.R
 import mx.loperstack.tokkiphealth.common.WebpageTool
-import mx.loperstack.tokkiphealth.common.compose.SdmMascot
 import mx.loperstack.tokkiphealth.common.compose.preview.Preview2
 import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
 import mx.loperstack.tokkiphealth.common.upgrade.UpgradeRepo
-import mx.loperstack.tokkiphealth.common.upgrade.ui.brandTitle
+import mx.loperstack.tokkiphealth.main.core.health.PhoneHealth
+import java.time.Duration
+import java.time.Instant
 
-@StringRes
-private fun getRngSlogan() = when ((0..8).random()) {
-    0 -> CommonR.string.slogan_message_0
-    1 -> CommonR.string.slogan_message_1
-    2 -> CommonR.string.slogan_message_2
-    3 -> CommonR.string.slogan_message_3
-    4 -> CommonR.string.slogan_message_4
-    5 -> CommonR.string.slogan_message_5
-    6 -> CommonR.string.slogan_message_6
-    7 -> CommonR.string.slogan_message_7
-    8 -> CommonR.string.slogan_message_8
-    else -> throw IllegalArgumentException()
-}
-
-internal const val TITLE_MASCOT_TEST_TAG = "dashboard.title.mascot"
-
+/**
+ * The top of the home screen, as in Healthy PC: Tokkip shows how the phone feels, says why in a
+ * sentence, and offers one button. Below it, the phone's free space, its last clean and what
+ * Tokkip has freed so far.
+ */
 data class TitleDashboardCardItem(
     val upgradeInfo: UpgradeRepo.Info?,
     val isWorking: Boolean,
     val onRibbonClicked: () -> Unit,
     val webpageTool: WebpageTool,
     val onMascotTriggered: (Boolean) -> Unit,
+    val health: PhoneHealth? = null,
+    val onClean: () -> Unit = {},
 ) : DashboardItem {
     override val stableId: Long = this.javaClass.hashCode().toLong()
 }
@@ -84,362 +70,215 @@ internal fun TitleDashboardCard(
     item: TitleDashboardCardItem,
     mascotTopBump: Int = 0,
 ) {
-    val slogan = remember { getRngSlogan() }
-    val sloganText = stringResource(slogan)
-    val isPro = item.upgradeInfo?.isPro == true
-    val titleText = brandTitle(includeQualifier = false, highlightQualifier = false)
-
-    val mascotRotation = remember { Animatable(0f) }
-    val mascotImpact = remember { Animatable(0f) }
-    val titleImpact = remember { Animatable(0f) }
-    val subtitleImpact = remember { Animatable(0f) }
-    val clickCount = remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    val onMascotTriggered by rememberUpdatedState(item.onMascotTriggered)
-
-    LaunchedEffect(mascotTopBump) {
-        if (mascotTopBump == 0) return@LaunchedEffect
-
-        // A quick squash on impact, then one small elastic recoil. New impacts cancel and restart
-        // this effect, so repeated enthusiastic scrolling never queues stale reactions.
-        mascotImpact.snapTo(0f)
-        mascotImpact.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 55, easing = FastOutLinearInEasing),
-        )
-        mascotImpact.animateTo(
-            targetValue = 0f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
-        )
-    }
-
-    LaunchedEffect(mascotTopBump) {
-        if (mascotTopBump == 0) return@LaunchedEffect
-
-        delay(20)
-        titleImpact.snapTo(0f)
-        titleImpact.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 45, easing = FastOutLinearInEasing),
-        )
-        titleImpact.animateTo(
-            targetValue = 0f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
-        )
-    }
-
-    LaunchedEffect(mascotTopBump) {
-        if (mascotTopBump == 0) return@LaunchedEffect
-
-        delay(45)
-        subtitleImpact.snapTo(0f)
-        subtitleImpact.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 40, easing = FastOutLinearInEasing),
-        )
-        subtitleImpact.animateTo(
-            targetValue = 0f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
-        )
-    }
-
-    Box(
+    val h = item.health
+    val still = LocalInspectionMode.current
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
-        TitleHeaderLayout(
-            modifier = Modifier.fillMaxWidth(),
-            mascot = {
-                SdmMascot(
-                    modifier = Modifier
-                        .testTag(TITLE_MASCOT_TEST_TAG)
-                        .height(56.dp)
-                        .graphicsLayer {
-                            val impact = mascotImpact.value
-                            translationY = impact * 3.dp.toPx()
-                            scaleX = 1f + impact * 0.012f
-                            scaleY = 1f - impact * 0.02f
-                            rotationZ = mascotRotation.value
-                        }
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    try {
-                                        tryAwaitRelease()
-                                    } finally {
-                                        onMascotTriggered(false)
-                                    }
-                                },
-                                onTap = {
-                                    val count = clickCount.intValue + 1
-                                    clickCount.intValue = count
-                                    scope.launch {
-                                        when {
-                                            count % 12 == 0 -> {
-                                                mascotRotation.snapTo(0f)
-                                                mascotRotation.animateTo(360f, tween(800))
-                                                mascotRotation.snapTo(0f)
-                                            }
-
-                                            count % 5 == 0 -> {
-                                                repeat(4) { i ->
-                                                    val target = if (i % 2 == 0) 5f else -5f
-                                                    mascotRotation.animateTo(target, tween(100))
-                                                }
-                                                mascotRotation.animateTo(0f, tween(100))
-                                            }
-                                        }
-                                    }
-                                },
-                                onLongPress = {
-                                    onMascotTriggered(true)
-                                },
-                            )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(width = 120.dp, height = 100.dp), contentAlignment = Alignment.Center) {
+                    Tokkip(
+                        modifier = Modifier.height(100.dp),
+                        mood = when {
+                            item.isWorking -> Mood.FOCUS
+                            h?.mood == PhoneHealth.Mood.HAPPY -> Mood.HAPPY
+                            h?.mood == PhoneHealth.Mood.TIRED -> Mood.SLEEPY
+                            else -> Mood.IDLE
                         },
-                )
-            },
-            title = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        face = if (h?.mood == PhoneHealth.Mood.DIZZY && !item.isWorking) TokkipEngine.Eye.SPIRAL else null,
+                        wear = true,
+                        jump = mascotTopBump,
+                        interactive = !still,
+                        greet = !still,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = titleText,
+                        text = stringResource(R.string.dashboard_health_eyebrow),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(h?.let { moodTitle(it.mood) } ?: R.string.dashboard_health_looking),
                         style = MaterialTheme.typography.headlineSmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.graphicsLayer {
-                            val impact = titleImpact.value
-                            translationY = impact * 2.dp.toPx()
-                            scaleY = 1f - impact * 0.008f
-                        },
-                    )
-                    Text(
-                        text = sloganText,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .graphicsLayer {
-                                val impact = subtitleImpact.value
-                                translationY = impact * 1.25.dp.toPx()
-                                scaleX = 1f + impact * 0.005f
-                            }
-                            .then(
-                                if (slogan == CommonR.string.slogan_message_8) {
-                                    Modifier.pointerInput(item.webpageTool) {
-                                        detectTapGestures(
-                                            onLongPress = {
-                                                item.webpageTool.open("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                                            },
-                                        )
-                                    }
-                                } else {
-                                    Modifier
-                                },
-                            ),
-                    )
-                }
-            },
-            // Hidden in previews/screenshots (LocalInspectionMode) so the build-type ribbon doesn't
-            // leak into Play Store screenshots, which render the debug variant.
-            ribbon = if (BuildConfigWrap.BUILD_TYPE != BuildConfigWrap.BuildType.RELEASE && !LocalInspectionMode.current) {
-                {
-                    BuildTypeRibbon(onClick = item.onRibbonClicked)
-                }
-            } else {
-                null
-            },
-        )
-    }
-}
-
-@Composable
-internal fun TitleHeaderLayout(
-    modifier: Modifier = Modifier,
-    mascot: @Composable () -> Unit,
-    title: @Composable () -> Unit,
-    ribbon: (@Composable () -> Unit)? = null,
-) {
-    Layout(
-        modifier = modifier,
-        content = {
-            Box(contentAlignment = Alignment.Center) { mascot() }
-            Box(contentAlignment = Alignment.Center) { title() }
-            if (ribbon != null) {
-                Box(contentAlignment = Alignment.Center) { ribbon() }
-            }
-        },
-    ) { measurables, constraints ->
-        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
-        val mascotPlaceable = measurables[0].measure(looseConstraints)
-        val ribbonPlaceable = measurables.getOrNull(2)?.measure(looseConstraints)
-
-        val inlineSpacing = 12.dp.roundToPx()
-        val stackSpacing = 8.dp.roundToPx()
-
-        // Past "Large" system text the mascot-beside-title row + inline badge can't keep the app
-        // name on one line — it collapses into an ugly 2–3 line stack ("SD" / "Maid" / "SE"). Switch
-        // to a clean centered vertical stack instead — mascot on top, the full-width one-line title
-        // below it, then the badge — which reads as a deliberate large-text header, not a cramped
-        // row. Normal/smaller text keeps the compact horizontal row below.
-        if (constraints.hasBoundedWidth && fontScale > 1.15f) {
-            val w = constraints.maxWidth
-            val titlePlaceable = measurables[1].measure(looseConstraints.copy(maxWidth = w))
-            val contentHeight = mascotPlaceable.height + stackSpacing + titlePlaceable.height +
-                (ribbonPlaceable?.let { stackSpacing + it.height } ?: 0)
-            val layoutHeight = if (constraints.hasBoundedHeight) {
-                contentHeight.coerceIn(constraints.minHeight, constraints.maxHeight)
-            } else {
-                contentHeight.coerceAtLeast(constraints.minHeight)
-            }
-            return@Layout layout(w, layoutHeight) {
-                var y = 0
-                mascotPlaceable.placeRelative((w - mascotPlaceable.width) / 2, y)
-                y += mascotPlaceable.height + stackSpacing
-                titlePlaceable.placeRelative((w - titlePlaceable.width) / 2, y)
-                ribbonPlaceable?.let { ribbon ->
-                    y += titlePlaceable.height + stackSpacing
-                    ribbon.placeRelative((w - ribbon.width) / 2, y)
-                }
-            }
-        }
-
-        // Cap the title width so the card-centered title leaves room for what sits beside it: the
-        // mascot on its left, and the build-type badge on its right when one is present. A long
-        // randomized slogan then ellipsizes instead of drawing over the mascot or pushing the badge
-        // onto a second row. The title is centered, so both gaps are equal and the reservation is
-        // symmetric against whichever neighbour is wider.
-        // Two limits: below ~186dp of layout width with no badge present (more when a wider badge
-        // is reserved against) the floor wins and the reservation stops being honoured, and the
-        // mascot's rotation lives in a graphicsLayer, so the tap easter-egg spin reaches past these
-        // measured bounds.
-        val titleConstraints = if (constraints.hasBoundedWidth) {
-            val minTitleWidth = 96.dp.roundToPx()
-            val neighbourWidth = maxOf(mascotPlaceable.width, ribbonPlaceable?.width ?: 0)
-            val reserved = 2 * (inlineSpacing + neighbourWidth)
-            val maxTitleWidth = (constraints.maxWidth - reserved)
-                .coerceAtLeast(minTitleWidth)
-                .coerceAtMost(constraints.maxWidth)
-            looseConstraints.copy(maxWidth = maxTitleWidth)
-        } else {
-            looseConstraints
-        }
-        val titlePlaceable = measurables[1].measure(titleConstraints)
-
-        val width = if (constraints.hasBoundedWidth) {
-            constraints.maxWidth
-        } else {
-            listOfNotNull(
-                mascotPlaceable.width,
-                titlePlaceable.width,
-                ribbonPlaceable?.width,
-            ).maxOrNull() ?: 0
-        }
-
-        val titleX = ((width - titlePlaceable.width) / 2).coerceAtLeast(0)
-        val titleRight = titleX + titlePlaceable.width
-        val mascotX = (titleX - inlineSpacing - mascotPlaceable.width).coerceAtLeast(0)
-        val desiredRibbonX = titleRight + inlineSpacing
-        val canPlaceRibbonInline = ribbonPlaceable?.let { desiredRibbonX + it.width <= width } ?: true
-
-        val topRowHeight = maxOf(
-            titlePlaceable.height,
-            mascotPlaceable.height,
-            if (canPlaceRibbonInline) ribbonPlaceable?.height ?: 0 else 0,
-        )
-        val stackedHeight = if (canPlaceRibbonInline) {
-            topRowHeight
-        } else {
-            topRowHeight + stackSpacing + checkNotNull(ribbonPlaceable).height
-        }
-        val layoutHeight = if (constraints.hasBoundedHeight) {
-            stackedHeight.coerceIn(constraints.minHeight, constraints.maxHeight)
-        } else {
-            stackedHeight.coerceAtLeast(constraints.minHeight)
-        }
-
-        layout(width, layoutHeight) {
-            val topRowY = 0
-            val titleY = topRowY + ((topRowHeight - titlePlaceable.height) / 2)
-            val mascotY = topRowY + ((topRowHeight - mascotPlaceable.height) / 2)
-
-            titlePlaceable.placeRelative(titleX, titleY)
-            mascotPlaceable.placeRelative(mascotX, mascotY)
-
-            ribbonPlaceable?.let { placeable ->
-                if (canPlaceRibbonInline) {
-                    val ribbonY = topRowY + ((topRowHeight - placeable.height) / 2)
-                    placeable.placeRelative(desiredRibbonX, ribbonY)
-                } else {
-                    val ribbonX = ((width - placeable.width) / 2).coerceAtLeast(0)
-                    val ribbonY = topRowHeight + stackSpacing
-                    placeable.placeRelative(ribbonX, ribbonY)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BuildTypeRibbon(
-    onClick: () -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.clickable(onClick = onClick),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.TwoTone.BugReport,
-                    contentDescription = null,
-                    modifier = Modifier.size(12.dp),
-                )
-                Box(modifier = Modifier.padding(start = 2.dp)) {
-                    Text(
-                        text = when (BuildConfigWrap.BUILD_TYPE) {
-                            BuildConfigWrap.BuildType.DEV -> "Dev"
-                            BuildConfigWrap.BuildType.BETA -> "Beta"
-                            BuildConfigWrap.BuildType.RELEASE -> ""
-                        },
-                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                     )
                 }
+                if (h != null) {
+                    Spacer(Modifier.width(8.dp))
+                    ScoreRing(h.score)
+                }
             }
-            Text(
-                text = BuildConfigWrap.VERSION_NAME,
-                style = MaterialTheme.typography.labelSmall,
-            )
+
+            if (h != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(summary(h)),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+                Stats(h)
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = item.onClean,
+                enabled = !item.isWorking,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            ) {
+                Text(
+                    text = stringResource(if (item.isWorking) R.string.dashboard_health_working else R.string.dashboard_health_action),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun Stats(h: PhoneHealth) {
+    val context = LocalContext.current
+    val now = Instant.now()
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile(
+            modifier = Modifier.weight(1f),
+            label = stringResource(R.string.dashboard_health_stat_free_label),
+            value = "${(h.freeRatio * 100).toInt()}%",
+            note = stringResource(
+                R.string.dashboard_health_stat_free_value,
+                Formatter.formatShortFileSize(context, h.storageFree),
+                Formatter.formatShortFileSize(context, h.storageTotal),
+            ),
+            level = h.disk,
+            progress = 1f - h.freeRatio,
+        )
+        StatTile(
+            modifier = Modifier.weight(1f),
+            label = stringResource(R.string.dashboard_health_stat_clean_label),
+            value = h.lastCleanAt?.let {
+                if (Duration.between(it, now).toMinutes() < 1) stringResource(R.string.dashboard_health_stat_clean_now)
+                else DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), now.toEpochMilli(), DateUtils.MINUTE_IN_MILLIS).toString()
+            } ?: stringResource(R.string.dashboard_health_stat_clean_never),
+            note = null,
+            level = h.clean,
+        )
+        StatTile(
+            modifier = Modifier.weight(1f),
+            label = stringResource(R.string.dashboard_health_stat_freed_label),
+            value = Formatter.formatShortFileSize(context, h.totalFreed),
+            note = null,
+            level = PhoneHealth.Level.OK,
+        )
+    }
+}
+
+@Composable
+private fun StatTile(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    note: String?,
+    level: PhoneHealth.Level,
+    progress: Float? = null,
+) {
+    val tone = levelColor(level)
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = value, style = MaterialTheme.typography.titleMedium, color = if (level == PhoneHealth.Level.OK) MaterialTheme.colorScheme.onSurface else tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (progress != null) {
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = tone,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                )
+            }
+            if (note != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(text = note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            }
+        }
+    }
+}
+
+@Composable
+private fun levelColor(level: PhoneHealth.Level): Color = when (level) {
+    PhoneHealth.Level.OK -> MaterialTheme.colorScheme.primary
+    PhoneHealth.Level.WARN -> MaterialTheme.colorScheme.tertiary
+    PhoneHealth.Level.BAD -> MaterialTheme.colorScheme.error
+}
+
+@Composable
+private fun ScoreRing(score: Int) {
+    val sweep by animateFloatAsState(targetValue = score / 100f, animationSpec = tween(900), label = "score")
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val fill = levelColor(
+        when {
+            score >= 65 -> PhoneHealth.Level.OK
+            score >= 45 -> PhoneHealth.Level.WARN
+            else -> PhoneHealth.Level.BAD
+        },
+    )
+    val desc = stringResource(R.string.dashboard_health_score_desc, score)
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .semantics { contentDescription = desc },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(64.dp)) {
+            val stroke = 7.dp.toPx()
+            val inset = stroke / 2
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(track, -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
+            drawArc(fill, -90f, 360f * sweep, false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        Text(text = "$score", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    }
+}
+
+private fun moodTitle(m: PhoneHealth.Mood): Int = when (m) {
+    PhoneHealth.Mood.HAPPY -> R.string.dashboard_health_mood_happy
+    PhoneHealth.Mood.CALM -> R.string.dashboard_health_mood_calm
+    PhoneHealth.Mood.TIRED -> R.string.dashboard_health_mood_tired
+    PhoneHealth.Mood.DIZZY -> R.string.dashboard_health_mood_dizzy
+}
+
+/** Tokkip's sentence: the same reasoning as Healthy PC's home. */
+private fun summary(h: PhoneHealth): Int = when {
+    h.disk == PhoneHealth.Level.OK && h.clean == PhoneHealth.Level.OK -> R.string.dashboard_health_summary_ok
+    h.disk == PhoneHealth.Level.BAD -> R.string.dashboard_health_summary_full
+    h.clean != PhoneHealth.Level.OK -> R.string.dashboard_health_summary_clean
+    else -> R.string.dashboard_health_summary_filling
 }
 
 @Preview2
 @Composable
 private fun TitleDashboardCardPreview() {
-    val context = LocalContext.current
     PreviewWrapper {
         TitleDashboardCard(
             item = TitleDashboardCardItem(
                 upgradeInfo = null,
                 isWorking = false,
                 onRibbonClicked = {},
-                webpageTool = WebpageTool(context),
+                webpageTool = WebpageTool(LocalContext.current),
                 onMascotTriggered = {},
+                health = PhoneHealth.assess(128_000_000_000, 18_000_000_000, Instant.now().minus(Duration.ofDays(20)), 6_400_000_000, Instant.now()),
             ),
         )
     }
