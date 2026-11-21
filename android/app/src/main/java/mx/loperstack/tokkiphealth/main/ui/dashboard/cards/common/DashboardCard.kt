@@ -36,7 +36,7 @@ internal fun DashboardCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(20.dp),
             content = content,
         )
     }
@@ -47,12 +47,14 @@ internal fun DashboardCard(
         Card(
             onClick = onClick,
             modifier = cardModifier,
+            shape = MaterialTheme.shapes.extraLarge,
             colors = colors,
             content = cardContent,
         )
     } else {
         Card(
             modifier = cardModifier,
+            shape = MaterialTheme.shapes.extraLarge,
             colors = colors,
             content = cardContent,
         )

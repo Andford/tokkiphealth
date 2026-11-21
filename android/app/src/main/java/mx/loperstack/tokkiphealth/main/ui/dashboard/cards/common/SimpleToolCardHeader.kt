@@ -14,6 +14,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import mx.loperstack.tokkiphealth.common.compose.ToolBadge
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import mx.loperstack.tokkiphealth.common.compose.preview.Preview2
@@ -27,15 +29,12 @@ internal fun SimpleToolCardHeader(
     isInitializing: Boolean,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+        ToolBadge(icon = icon, index = title.hashCode())
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
         if (isInitializing) {

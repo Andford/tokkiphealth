@@ -77,6 +77,7 @@ open class App : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         mx.loperstack.tokkip.character.Sounds.init(this)
+        mx.loperstack.tokkiphealth.main.core.health.TokkipNote.init(this)
         if (BuildConfigWrap.DEBUG) {
             Logging.install(logCatLogger)
             log(TAG) { "BuildConfigWrap.DEBUG=true" }

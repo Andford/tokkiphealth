@@ -114,20 +114,24 @@ internal fun DashboardViewModel.buildTitleCardItem(): Flow<TitleDashboardCardIte
     } catch (e: Exception) {
         0L to 0L
     }
-    val lastClean = reports
+    val lastCleanReport = reports
         .filter { (it.affectedSpace ?: 0L) > 0L }
-        .maxOfOrNull { it.endAt }
+        .maxByOrNull { it.endAt }
+    val lastClean = lastCleanReport?.endAt
+    val health = PhoneHealth.assess(
+        storageTotal = total,
+        storageFree = free,
+        lastCleanAt = lastClean,
+        totalFreed = stats.totalSpaceFreed,
+        now = java.time.Instant.now(),
+    )
+    // Tokkip (the app) hears about it too, when there's news.
+    if (total > 0) mx.loperstack.tokkiphealth.main.core.health.TokkipNote.onHealth(health, lastCleanReport?.affectedSpace)
     TitleDashboardCardItem(
         upgradeInfo = upgradeInfo,
         webpageTool = webpageTool,
         isWorking = !taskState.isIdle,
-        health = PhoneHealth.assess(
-            storageTotal = total,
-            storageFree = free,
-            lastCleanAt = lastClean,
-            totalFreed = stats.totalSpaceFreed,
-            now = java.time.Instant.now(),
-        ),
+        health = health,
         onRibbonClicked = { webpageTool.open(SdmSeLinks.ISSUES) },
         onMascotTriggered = { easterEggTriggered.value = it },
         onClean = {

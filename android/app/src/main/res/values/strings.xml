@@ -511,4 +511,5 @@
     <string name="dashboard_health_stat_freed_label">Freed with Tokkip</string>
     <string name="dashboard_health_action">Check my phone</string>
     <string name="dashboard_health_working">Working…</string>
+    <string name="tokkip_note_clean">I freed %1$s on your phone</string>
 </resources>

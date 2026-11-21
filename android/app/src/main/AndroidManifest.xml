@@ -63,6 +63,11 @@
     -->
     <uses-sdk tools:overrideLibrary="androidx.heifwriter" />
 
+    <!-- Tokkip hears how the phone is doing (main/core/health/TokkipNote.kt). -->
+    <queries>
+        <package android:name="mx.loperstack.tokkip" />
+    </queries>
+
     <application
         android:name="mx.loperstack.tokkiphealth.App"
         android:allowBackup="true"

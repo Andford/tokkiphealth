@@ -440,4 +440,5 @@
     <string name="dashboard_health_stat_freed_label">Liberado con Tokkip</string>
     <string name="dashboard_health_action">Revisar mi teléfono</string>
     <string name="dashboard_health_working">Trabajando…</string>
+    <string name="tokkip_note_clean">Liberé %1$s en tu teléfono</string>
 </resources>

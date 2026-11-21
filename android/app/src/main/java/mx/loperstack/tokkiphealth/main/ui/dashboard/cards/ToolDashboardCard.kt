@@ -19,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import mx.loperstack.tokkiphealth.common.compose.ToolBadge
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import mx.loperstack.tokkiphealth.common.R as CommonR
@@ -74,15 +76,12 @@ internal fun ToolDashboardCard(
         onClick = item.onViewTool.takeIf { clickable },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = item.toolType.icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+            ToolBadge(icon = item.toolType.icon, index = item.toolType.ordinal)
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = toolName,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
             if (item.isInitializing) {
