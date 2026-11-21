@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import mx.loperstack.tokkiphealth.common.compose.TokkipAdviceCard
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.twotone.HelpOutline
@@ -516,6 +518,9 @@ private fun LinearList(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = SdmListDefaults.FullWidthContentPadding,
     ) {
+        item(key = "tokkip-advice") {
+            TokkipAdviceCard(text = stringResource(DeduplicatorR.string.deduplicator_advice))
+        }
         items(rows, key = { it.cluster.identifier.value }) { row ->
             val selectedDupes = selection.selectedDupes(row.cluster.identifier)
             DeduplicatorLinearRow(
@@ -553,6 +558,9 @@ private fun GridList(
             verticalArrangement = Arrangement.spacedBy(0.dp),
             horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
+            item(key = "tokkip-advice", span = { GridItemSpan(maxLineSpan) }) {
+                TokkipAdviceCard(text = stringResource(DeduplicatorR.string.deduplicator_advice))
+            }
             items(rows, key = { it.cluster.identifier.value }) { row ->
                 val isSelected = selection.hasSelectedDupes(row.cluster.identifier)
                 DeduplicatorGridRow(

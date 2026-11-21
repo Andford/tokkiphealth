@@ -111,4 +111,5 @@
     <string name="appcleaner_forcestop_before_clearing_summary">Detiene las apps antes de borrar su caché. Ayuda con algunas apps, pero otras pueden portarse raro y tendrás que volver a abrirlas.</string>
     <string name="appcleaner_progress_force_stopping">Deteniendo apps…</string>
     <string name="appcleaner_progress_checking_freed_space">Viendo cuánto se liberó…</string>
+    <string name="appcleaner_advice">Es caché y basura de apps: las apps la vuelven a crear cuando la necesitan. Puedes borrarla sin miedo; solo revisa la multimedia de mensajería (WhatsApp, Telegram) si hay algo que quieras conservar.</string>
 </resources>

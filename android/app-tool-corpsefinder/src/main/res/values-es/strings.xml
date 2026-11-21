@@ -60,10 +60,16 @@
     <string name="corpsefinder_corpse_hint_keeper">Esto puede tener datos que quieras conservar aunque su app ya no esté, como fotos o respaldos.</string>
     <string name="corpsefinder_corpse_hint_common">Esto tiene un nombre muy común y podría ser de apps instaladas que Tokkip Health no conoce.</string>
     <string name="corpsefinder_risk_keeper_chip">Quizá lo quieras</string>
-    <string name="corpsefinder_risk_common_chip">Común</string>
+    <string name="corpsefinder_risk_common_chip">Revísalo</string>
     <string name="corpsefinder_markers_dialog_title">Qué significan las marcas</string>
     <string name="corpsefinder_markers_dialog_normal_label">Sin marca</string>
     <string name="corpsefinder_markers_dialog_normal_description">Resto normal. Casi siempre se puede borrar sin miedo: son archivos de apps que ya no están instaladas.</string>
     <string name="tour_corpsefinder_intro_body">Restos encuentra datos que dejaron apps que ya desinstalaste. Ya no son de nada instalado, así que borrarlos libera espacio. Casi todo se puede borrar sin miedo, pero revisa la marca si tienes dudas.</string>
     <string name="tour_corpsefinder_row_body">Cada fila es un resto y la app de la que vino. La marca dice qué tan seguro está Tokkip Health de que se puede borrar; toca la ⓘ de arriba para ver qué significa cada marca.</string>
+    <string name="corpsefinder_advice_all_safe">Son restos de apps que ya no tienes. Puedes borrarlos todos sin miedo.</string>
+    <plurals name="corpsefinder_advice_some_review">
+        <item quantity="one">Son restos de apps que ya no tienes. Casi todo se puede ir sin miedo; revisa primero el que marqué.</item>
+        <item quantity="many">Son restos de apps que ya no tienes. Casi todo se puede ir sin miedo; revisa primero los %d que marqué.</item>
+        <item quantity="other">Son restos de apps que ya no tienes. Casi todo se puede ir sin miedo; revisa primero los %d que marqué.</item>
+    </plurals>
 </resources>

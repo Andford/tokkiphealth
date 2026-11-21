@@ -34,6 +34,9 @@ import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
 import mx.loperstack.tokkiphealth.corpsefinder.R as CorpseR
 import mx.loperstack.tokkiphealth.corpsefinder.core.Corpse
 import mx.loperstack.tokkiphealth.corpsefinder.core.RiskLevel
+import mx.loperstack.tokkiphealth.common.compose.AdviceVerdict
+import mx.loperstack.tokkiphealth.common.compose.color
+import mx.loperstack.tokkiphealth.common.compose.label
 import mx.loperstack.tokkiphealth.corpsefinder.ui.icon
 import mx.loperstack.tokkiphealth.corpsefinder.ui.labelRes
 import mx.loperstack.tokkiphealth.corpsefinder.ui.list.CorpseFinderListViewModel
@@ -66,10 +69,11 @@ fun CorpseRow(
         Formatter.formatShortFileSize(context, corpse.size)
     }
 
+    // Tokkip's advice on every row: safe to delete, maybe yours, or check it first.
     val riskBadge = when (corpse.riskLevel) {
-        RiskLevel.NORMAL -> null
-        RiskLevel.KEEPER -> CorpseR.string.corpsefinder_risk_keeper_chip to MaterialTheme.colorScheme.secondary
-        RiskLevel.COMMON -> CorpseR.string.corpsefinder_risk_common_chip to MaterialTheme.colorScheme.tertiary
+        RiskLevel.NORMAL -> AdviceVerdict.SAFE.label() to AdviceVerdict.SAFE.color()
+        RiskLevel.KEEPER -> stringResource(CorpseR.string.corpsefinder_risk_keeper_chip) to MaterialTheme.colorScheme.secondary
+        RiskLevel.COMMON -> stringResource(CorpseR.string.corpsefinder_risk_common_chip) to MaterialTheme.colorScheme.tertiary
     }
 
     SelectableListRow(
@@ -126,9 +130,9 @@ fun CorpseRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    riskBadge?.let { (labelRes, accent) ->
+                    riskBadge.let { (label, accent) ->
                         RiskPill(
-                            label = stringResource(labelRes),
+                            label = label,
                             accent = accent,
                             onClick = onRiskChipClick,
                         )

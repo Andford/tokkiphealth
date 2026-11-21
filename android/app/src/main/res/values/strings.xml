@@ -492,7 +492,7 @@
     </plurals>
     <string name="settings_acknowledgements_sdmaid_body">Tokkip Health is built on SD Maid SE by Matthias Urhahn (darken), under the GPL-3.0. Thank you!</string>
     <string name="settings_acknowledgements_tokkip_body">Tokkip, his look and his sounds are LoperStack\'s, the same as in Tokkip and Healthy PC.</string>
-    <string name="dashboard_health_eyebrow">Your phone's health</string>
+    <string name="dashboard_health_eyebrow">Your phone\'s health</string>
     <string name="dashboard_health_looking">Looking at your phone…</string>
     <string name="dashboard_health_mood_happy">Your phone feels great</string>
     <string name="dashboard_health_mood_calm">Your phone is doing fine</string>

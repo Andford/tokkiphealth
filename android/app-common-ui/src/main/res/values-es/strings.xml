@@ -21,4 +21,8 @@
     <string name="tour_confirm_disable_all">Apagar todos los recorridos</string>
     <string name="navigation_unknown_destination_title">Pantalla no disponible</string>
     <string name="navigation_unknown_destination_message">No se pudo abrir esta pantalla.</string>
+    <string name="tokkip_advice_title">Tokkip dice</string>
+    <string name="tokkip_advice_verdict_safe">Bórralo sin miedo</string>
+    <string name="tokkip_advice_verdict_review">Revísalo</string>
+    <string name="tokkip_advice_verdict_yours">Tú decides</string>
 </resources>

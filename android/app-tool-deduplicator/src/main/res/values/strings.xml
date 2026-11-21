@@ -88,4 +88,5 @@
     <string name="deduplicator_view_mode_directories_label">Folders</string>
     <string name="tour_deduplicator_details_cluster_body">These files all appear to be the same item or media content, a cluster of duplicates.</string>
     <string name="tour_deduplicator_details_delete_mark_body">Files with this icon will be deleted; the remaining file in the group is the one Tokkip Health keeps. You can change how the keeper is chosen in the deletion strategy settings.</string>
+    <string name="deduplicator_advice">One copy of each file always stays: the extra ones can go without fear. Look at the similar ones before, they may not be the same.</string>
 </resources>

@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.ui.res.pluralStringResource
+import mx.loperstack.tokkiphealth.common.compose.TokkipAdviceCard
+import mx.loperstack.tokkiphealth.corpsefinder.core.RiskLevel
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.twotone.HelpOutline
@@ -247,6 +251,16 @@ internal fun CorpseFinderListScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = SdmListDefaults.GridContentPadding,
                         ) {
+                            item(key = "tokkip-advice", span = { GridItemSpan(maxLineSpan) }) {
+                                val review = rows.count { it.corpse.riskLevel != RiskLevel.NORMAL }
+                                TokkipAdviceCard(
+                                    text = if (review == 0) {
+                                        stringResource(R.string.corpsefinder_advice_all_safe)
+                                    } else {
+                                        pluralStringResource(R.plurals.corpsefinder_advice_some_review, review, review)
+                                    },
+                                )
+                            }
                             itemsIndexed(rows, key = { _, it -> it.identifier.toString() }) { index, row ->
                                 val isSelected = selection.isSelected(row.identifier)
                                 CorpseRow(

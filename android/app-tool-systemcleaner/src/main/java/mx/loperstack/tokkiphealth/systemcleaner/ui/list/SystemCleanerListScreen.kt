@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import mx.loperstack.tokkiphealth.common.compose.TokkipAdviceCard
+import mx.loperstack.tokkiphealth.systemcleaner.R as SystemCleanerR
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.twotone.HelpOutline
@@ -240,6 +243,21 @@ internal fun SystemCleanerListScreen(
                             contentPadding = SdmListDefaults.GridContentPadding,
                         ) {
                             val selectionActive = selection.isActive
+                            item(key = "tokkip-advice", span = { GridItemSpan(maxLineSpan) }) {
+                                // Stock filters are system junk; screenshots, the trash and the
+                                // user's own filters hold things that are theirs.
+                                val yours = rows.count {
+                                    val id = it.identifier
+                                    !id.contains(".stock.") || id.endsWith("ScreenshotsFilter") || id.endsWith("TrashedFilter")
+                                }
+                                TokkipAdviceCard(
+                                    text = if (yours == 0) {
+                                        stringResource(SystemCleanerR.string.systemcleaner_advice_all_safe)
+                                    } else {
+                                        pluralStringResource(SystemCleanerR.plurals.systemcleaner_advice_some_yours, yours, yours)
+                                    },
+                                )
+                            }
                             itemsIndexed(rows, key = { _, it -> it.identifier }) { index, row ->
                                 val isSelected = selection.isSelected(row.identifier)
                                 SystemCleanerRow(

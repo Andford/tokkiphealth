@@ -20,4 +20,8 @@
     <string name="tour_confirm_disable_all">Disable all tours</string>
     <string name="navigation_unknown_destination_title">Screen unavailable</string>
     <string name="navigation_unknown_destination_message">This screen could not be opened.</string>
+    <string name="tokkip_advice_title">Tokkip says</string>
+    <string name="tokkip_advice_verdict_safe">Safe to delete</string>
+    <string name="tokkip_advice_verdict_review">Check it first</string>
+    <string name="tokkip_advice_verdict_yours">Your call</string>
 </resources>

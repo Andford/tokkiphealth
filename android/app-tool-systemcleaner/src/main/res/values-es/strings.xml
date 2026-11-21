@@ -118,4 +118,10 @@
     <string name="systemcleaner_customfilter_export_action">Exportar el filtro elegido</string>
     <string name="tour_systemcleaner_intro_body">El limpiador del sistema encuentra basura con filtros que no son de una app en particular. Ya hay reglas para cosas como carpetas vacías, registros viejos y miniaturas sobrantes. En los ajustes puedes crear las tuyas.</string>
     <string name="tour_systemcleaner_filter_body">Cada fila es un filtro y lo que encontró. Abre sus detalles para ver exactamente qué archivos coinciden antes de borrar nada.</string>
+    <string name="systemcleaner_advice_all_safe">Es basura del sistema: registros, temporales y archivos sobrantes. Puedes borrarla sin miedo.</string>
+    <plurals name="systemcleaner_advice_some_yours">
+        <item quantity="one">Casi todo es basura del sistema y se puede ir sin miedo. Antes revisa tus capturas, tu papelera o tus filtros.</item>
+        <item quantity="many">Casi todo es basura del sistema y se puede ir sin miedo. Antes revisa tus capturas, tu papelera o tus filtros (%d grupos).</item>
+        <item quantity="other">Casi todo es basura del sistema y se puede ir sin miedo. Antes revisa tus capturas, tu papelera o tus filtros (%d grupos).</item>
+    </plurals>
 </resources>

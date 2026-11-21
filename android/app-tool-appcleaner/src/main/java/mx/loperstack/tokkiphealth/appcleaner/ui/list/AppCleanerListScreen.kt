@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import mx.loperstack.tokkiphealth.common.compose.TokkipAdviceCard
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.twotone.ArrowBack
@@ -298,6 +300,9 @@ internal fun AppCleanerListScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = SdmListDefaults.GridContentPadding,
                         ) {
+                            item(key = "tokkip-advice", span = { GridItemSpan(maxLineSpan) }) {
+                                TokkipAdviceCard(text = stringResource(R.string.appcleaner_advice))
+                            }
                             items(rows, key = { it.identifier.toString() }) { row ->
                                 val isSelected = selection.isSelected(row.identifier)
                                 AppCleanerListRow(

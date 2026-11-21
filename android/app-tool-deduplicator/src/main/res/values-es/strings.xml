@@ -93,4 +93,5 @@
     <string name="deduplicator_view_mode_directories_label">Carpetas</string>
     <string name="tour_deduplicator_details_cluster_body">Todos estos archivos parecen ser lo mismo: un grupo de duplicados.</string>
     <string name="tour_deduplicator_details_delete_mark_body">Los archivos con este ícono se van a borrar; el que queda en el grupo es el que Tokkip Health conserva. Puedes cambiar cómo se elige en \"Cuál se queda\".</string>
+    <string name="deduplicator_advice">Siempre se queda una copia de cada archivo: las de más se pueden ir sin miedo. Los parecidos revísalos antes, puede que no sean iguales.</string>
 </resources>
