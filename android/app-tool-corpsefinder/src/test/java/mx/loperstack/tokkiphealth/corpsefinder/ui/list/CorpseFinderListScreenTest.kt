@@ -8,6 +8,9 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import mx.loperstack.tokkiphealth.common.compose.preview.PreviewWrapper
@@ -77,6 +80,8 @@ class CorpseFinderListScreenTest : BaseComposeRobolectricTest() {
 
         composeRule.onNodeWithText("alpha.dat").assertExists()
         composeRule.onNodeWithText("beta.dat").assertExists()
+        // Tokkip's advice card sits on top, so the last row may need a scroll.
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("gamma.dat"))
         composeRule.onNodeWithText("gamma.dat").assertExists()
         // "Empty" placeholder must not render when rows are present.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
