@@ -33,7 +33,7 @@ class FilterContentDetailsScreenTest : BaseComposeRobolectricTest() {
         composeRule.setDetailsScreen(FilterContentDetailsViewModel.State(items = emptyList()))
 
         // SystemCleaner top bar title is always visible.
-        composeRule.onNodeWithText("SystemCleaner").assertExists()
+        composeRule.onNodeWithText("System cleaner").assertExists()
         // Empty placeholder for drained state.
         composeRule.onNodeWithText("Empty").assertExists()
     }
@@ -52,7 +52,7 @@ class FilterContentDetailsScreenTest : BaseComposeRobolectricTest() {
             ),
         )
 
-        composeRule.onNodeWithText("SystemCleaner").assertExists()
+        composeRule.onNodeWithText("System cleaner").assertExists()
         // Empty placeholder must NOT render when items are present.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // The filter label appears in the tab row.

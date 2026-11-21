@@ -45,7 +45,7 @@ class AppCleanerSettingsScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the AppCleaner title`() {
         composeRule.setSettingsScreen(AppCleanerSettingsViewModel.State())
 
-        composeRule.onNodeWithText("AppCleaner").assertExists()
+        composeRule.onNodeWithText("App caches").assertExists()
     }
 
     @Test

@@ -19,6 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import mx.loperstack.tokkiphealth.common.R as CommonR
+import mx.loperstack.tokkiphealth.common.compose.AdviceChip
+import mx.loperstack.tokkiphealth.common.compose.AdviceVerdict
 import mx.loperstack.tokkiphealth.common.compose.SelectableListRow
 import mx.loperstack.tokkiphealth.common.compose.SelectableListRowIconBox
 import mx.loperstack.tokkiphealth.common.compose.preview.Preview2
@@ -92,6 +94,10 @@ fun SystemCleanerRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Stock filters are system junk; screenshots, the trash and own filters are yours.
+                val id = row.identifier
+                val yours = !id.contains(".stock.") || id.endsWith("ScreenshotsFilter") || id.endsWith("TrashedFilter")
+                AdviceChip(if (yours) AdviceVerdict.YOURS else AdviceVerdict.SAFE)
             }
         }
     }

@@ -38,7 +38,7 @@ class AnalyzerSettingsScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the tool name`() {
         composeRule.setSettingsScreen(AnalyzerSettingsViewModel.State())
 
-        composeRule.onNodeWithText("StorageAnalyzer").assertExists()
+        composeRule.onNodeWithText("Storage explorer").assertExists()
     }
 
     @Test

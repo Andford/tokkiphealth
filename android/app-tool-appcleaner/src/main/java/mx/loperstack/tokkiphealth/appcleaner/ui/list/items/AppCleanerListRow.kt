@@ -24,6 +24,8 @@ import mx.loperstack.tokkiphealth.appcleaner.ui.list.AppCleanerListViewModel
 import mx.loperstack.tokkiphealth.appcleaner.ui.preview.previewAppCleanerRow
 import mx.loperstack.tokkiphealth.appcleaner.ui.preview.previewAppJunk
 import mx.loperstack.tokkiphealth.common.R as CommonR
+import mx.loperstack.tokkiphealth.common.compose.AdviceChip
+import mx.loperstack.tokkiphealth.common.compose.AdviceVerdict
 import mx.loperstack.tokkiphealth.common.compose.SelectableListRow
 import mx.loperstack.tokkiphealth.common.compose.SelectableListRowIconBox
 import mx.loperstack.tokkiphealth.common.compose.SystemAppChip
@@ -106,6 +108,12 @@ fun AppCleanerListRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (junk.isSystemApp) SystemAppChip()
+                // Caches come back on their own; messaging media may be something you want.
+                val media = junk.expendables?.keys?.any { k ->
+                    val n = k.simpleName.orEmpty()
+                    MESSAGING.any { n.contains(it, ignoreCase = true) }
+                } == true
+                AdviceChip(if (media) AdviceVerdict.YOURS else AdviceVerdict.SAFE)
             }
             if (junk.isExclusionLimited) {
                 Text(
@@ -163,3 +171,6 @@ private fun AppCleanerListRowExclusionLimitedPreview() {
         )
     }
 }
+
+// Filters with things that are the user's: messaging media and recycle bins (names are kept, see consumer-rules.pro).
+private val MESSAGING = listOf("WhatsAppReceived", "WhatsAppSent", "Telegram", "Threema", "WeChat", "Viber", "QQ", "RecycleBins")

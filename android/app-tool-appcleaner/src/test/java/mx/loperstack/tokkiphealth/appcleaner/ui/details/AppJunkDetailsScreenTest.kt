@@ -96,7 +96,7 @@ class AppJunkDetailsScreenTest : BaseComposeRobolectricTest() {
             ),
         )
 
-        composeRule.onNodeWithText("AppCleaner").assertExists()
+        composeRule.onNodeWithText("App caches").assertExists()
         // Empty placeholder must NOT render when items are present.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
     }

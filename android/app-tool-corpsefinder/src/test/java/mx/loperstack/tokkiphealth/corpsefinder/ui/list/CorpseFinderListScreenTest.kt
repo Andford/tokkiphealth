@@ -57,7 +57,7 @@ class CorpseFinderListScreenTest : BaseComposeRobolectricTest() {
         // SdmEmptyState text "Empty" must not appear during loading.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // Tool name from the top bar is always visible.
-        composeRule.onNodeWithText("CorpseFinder").assertExists()
+        composeRule.onNodeWithText("Leftovers").assertExists()
     }
 
     @Test

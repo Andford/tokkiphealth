@@ -22,8 +22,8 @@
     <string name="exclusion_reset_default_exclusions">Restore default exclusions</string>
     <string name="exclusion_import_action">Import exclusions</string>
     <string name="exclusion_export_action">Export exclusions</string>
-    <string name="exclusion_create_pkg_hint">Use the AppControl tool to create app exclusions.</string>
-    <string name="exclusion_create_path_hint">Use the StorageAnalyzer tool to create path exclusions.</string>
+    <string name="exclusion_create_pkg_hint">Use the App manager tool to create app exclusions.</string>
+    <string name="exclusion_create_path_hint">Use the Storage explorer tool to create path exclusions.</string>
     <string name="exclusion_create_segment_hint">Match a name segment, like \"DCIM/Camera\".</string>
     <string name="exclusion_show_defaults_action">Show defaults</string>
     <plurals name="exclusion_import_success_x_items">

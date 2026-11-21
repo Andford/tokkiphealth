@@ -79,7 +79,7 @@ class DeduplicatorDetailsScreenTest : BaseComposeRobolectricTest() {
         composeRule.setDetailsScreen(null)
 
         // Top bar title is always visible.
-        composeRule.onNodeWithText("Deduplicator").assertExists()
+        composeRule.onNodeWithText("Duplicates").assertExists()
         // Empty placeholder must NOT render during loading.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
     }
@@ -108,7 +108,7 @@ class DeduplicatorDetailsScreenTest : BaseComposeRobolectricTest() {
             ),
         )
 
-        composeRule.onNodeWithText("Deduplicator").assertExists()
+        composeRule.onNodeWithText("Duplicates").assertExists()
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // The cluster summary card unconditionally renders the freeable-size headline
         // ("… can be freed") — a load-bearing signal that ClusterContent composed, not just the

@@ -48,7 +48,7 @@ class SystemCleanerListScreenTest : BaseComposeRobolectricTest() {
         // "Empty" placeholder must not appear during loading.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // Tool name from the top bar is always visible.
-        composeRule.onNodeWithText("SystemCleaner").assertExists()
+        composeRule.onNodeWithText("System cleaner").assertExists()
     }
 
     @Test
@@ -86,7 +86,7 @@ class SystemCleanerListScreenTest : BaseComposeRobolectricTest() {
         )
 
         // Before long-press: tool-name top bar visible, no selection top bar.
-        composeRule.onNodeWithText("SystemCleaner").assertExists()
+        composeRule.onNodeWithText("System cleaner").assertExists()
 
         composeRule.onNodeWithText("A row").performTouchInput { longClick() }
 
@@ -112,7 +112,7 @@ class SystemCleanerListScreenTest : BaseComposeRobolectricTest() {
         composeRule.onNodeWithContentDescription("Close").performClick()
 
         // After clearing, the regular top bar with tool name should be back.
-        composeRule.onNodeWithText("SystemCleaner").assertExists()
+        composeRule.onNodeWithText("System cleaner").assertExists()
         // "Delete selected" action should no longer be visible.
         composeRule.onAllNodesWithContentDescription("Delete selected").assertCountEquals(0)
     }

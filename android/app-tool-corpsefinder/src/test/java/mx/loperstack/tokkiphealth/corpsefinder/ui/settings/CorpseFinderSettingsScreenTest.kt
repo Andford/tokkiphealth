@@ -48,7 +48,7 @@ class CorpseFinderSettingsScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the CorpseFinder title`() {
         composeRule.setSettingsScreen(CorpseFinderSettingsViewModel.State())
 
-        composeRule.onNodeWithText("CorpseFinder").assertExists()
+        composeRule.onNodeWithText("Leftovers").assertExists()
     }
 
     @Test

@@ -53,7 +53,7 @@ class DeduplicatorSettingsScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the Deduplicator title`() {
         composeRule.setSettingsScreen()
 
-        composeRule.onNodeWithText("Deduplicator").assertExists()
+        composeRule.onNodeWithText("Duplicates").assertExists()
     }
 
     @Test

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -46,10 +47,13 @@ fun SelectableListRow(
     verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val background = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+    // Tokkip's look: each result is its own rounded tile, as in Healthy PC's lists.
+    val background = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .clip(MaterialTheme.shapes.large)
             .background(background)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(contentPadding),

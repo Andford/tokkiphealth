@@ -47,7 +47,7 @@ class SystemCleanerSettingsScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the SystemCleaner title`() {
         composeRule.setSettingsScreen(SystemCleanerSettingsViewModel.State())
 
-        composeRule.onNodeWithText("SystemCleaner").assertExists()
+        composeRule.onNodeWithText("System cleaner").assertExists()
     }
 
     @Test

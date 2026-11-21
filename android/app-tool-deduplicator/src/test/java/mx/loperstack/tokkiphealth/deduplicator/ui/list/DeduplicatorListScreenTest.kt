@@ -67,7 +67,7 @@ class DeduplicatorListScreenTest : BaseComposeRobolectricTest() {
         composeRule.setListScreen(null)
 
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
-        composeRule.onNodeWithText("Deduplicator").assertExists()
+        composeRule.onNodeWithText("Duplicates").assertExists()
     }
 
     @Test

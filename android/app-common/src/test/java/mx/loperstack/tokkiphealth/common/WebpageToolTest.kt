@@ -37,10 +37,10 @@ class WebpageToolTest : BaseTest() {
 
     @Test
     @Config(qualifiers = "de")
-    fun `docs links open in the app language`() {
+    fun `help links open Tokkip Health's own help`() {
         WebpageTool(application).open("https://sdmse.darken.eu/setup#shizuku") shouldBe true
 
-        shadowOf(application).nextStartedActivity!!.data shouldBe "https://sdmse.darken.eu/de/setup#shizuku".toUri()
+        shadowOf(application).nextStartedActivity!!.data shouldBe "https://github.com/Andford/tokkiphealth/blob/main/android/docs/setup.md#shizuku".toUri()
     }
 
     @Test

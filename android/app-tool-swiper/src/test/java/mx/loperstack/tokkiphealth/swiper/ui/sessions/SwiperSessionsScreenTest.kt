@@ -59,7 +59,7 @@ class SwiperSessionsScreenTest : BaseComposeRobolectricTest() {
 
         // "Swiper" is the tool name from `swiper_tool_name` in app-common — appears in the top bar
         // regardless of session list state.
-        composeRule.onNodeWithText("Swiper").assertExists()
+        composeRule.onNodeWithText("Swipe").assertExists()
     }
 
     @Test

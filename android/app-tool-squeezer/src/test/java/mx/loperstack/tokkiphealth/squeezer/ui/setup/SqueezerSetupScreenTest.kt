@@ -43,7 +43,7 @@ class SqueezerSetupScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the tool name`() {
         composeRule.setSetupScreen(SqueezerSetupViewModel.State())
 
-        composeRule.onNodeWithText("Media Squeeze").assertExists()
+        composeRule.onNodeWithText("Compress photos and videos").assertExists()
     }
 
     @Test

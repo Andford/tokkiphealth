@@ -126,7 +126,7 @@
         <item quantity="one">%d location can\'t be used for compression and was removed. Compression requires direct access to internal storage.</item>
         <item quantity="other">%d locations can\'t be used for compression and were removed. Compression requires direct access to internal storage.</item>
     </plurals>
-    <string name="squeezer_setup_explanation">Media Squeeze reduces the file size of images and videos to free up storage space. This permanently reduces quality and cannot be undone. Review your settings carefully before starting.</string>
+    <string name="squeezer_setup_explanation">Compress photos and videos reduces the file size of images and videos to free up storage space. This permanently reduces quality and cannot be undone. Review your settings carefully before starting.</string>
     <string name="squeezer_setup_paths_title">Search locations</string>
     <string name="squeezer_setup_paths_default">Select folders to search</string>
     <string name="squeezer_setup_quality_title">Compression quality</string>

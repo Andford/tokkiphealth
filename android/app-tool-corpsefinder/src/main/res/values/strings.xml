@@ -61,7 +61,7 @@
     <string name="corpsefinder_markers_dialog_normal_description">Standard remnant. Generally safe to remove — these files belong to apps that are no longer installed.</string>
 
     <!-- Guided tour -->
-    <string name="tour_corpsefinder_intro_body">CorpseFinder finds data left behind by apps you\'ve already uninstalled. It no longer belongs to anything installed, so removing it frees up space. Most of it is safe to remove, but check the marker when you\'re unsure.</string>
+    <string name="tour_corpsefinder_intro_body">Leftovers finds data left behind by apps you\'ve already uninstalled. It no longer belongs to anything installed, so removing it frees up space. Most of it is safe to remove, but check the marker when you\'re unsure.</string>
     <string name="tour_corpsefinder_row_body">Each item is leftover data and the app it came from. The marker shows how confident Tokkip Health is that it\'s safe to remove — tap the ⓘ at the top to learn what the markers mean.</string>
     <string name="corpsefinder_advice_all_safe">These are leftovers from apps you no longer have. You can delete all of them without fear.</string>
     <plurals name="corpsefinder_advice_some_review">

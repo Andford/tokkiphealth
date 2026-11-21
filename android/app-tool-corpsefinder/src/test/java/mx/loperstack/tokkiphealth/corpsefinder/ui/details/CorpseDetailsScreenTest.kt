@@ -74,7 +74,7 @@ class CorpseDetailsScreenTest : BaseComposeRobolectricTest() {
             ),
         )
 
-        composeRule.onNodeWithText("CorpseFinder").assertExists()
+        composeRule.onNodeWithText("Leftovers").assertExists()
         // Empty placeholder must NOT render when items are present.
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // Assert the CorpseContent body is actually composed — not just the top bar. Two

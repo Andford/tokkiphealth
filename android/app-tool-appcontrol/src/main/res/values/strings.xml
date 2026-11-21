@@ -37,7 +37,7 @@
     <string name="appcontrol_list_sortmode_packagename_label">Packagename</string>
     <string name="appcontrol_list_sortmode_size_label">Size</string>
     <string name="appcontrol_list_sortmode_screentime_label">Screen time</string>
-    <string name="appcontrol_list_sortmode_size_caveat_msg">App sizes are estimated for performance reasons. Use the StorageAnalyzer tool for more accurate data.</string>
+    <string name="appcontrol_list_sortmode_size_caveat_msg">App sizes are estimated for performance reasons. Use the Storage explorer tool for more accurate data.</string>
     <string name="appcontrol_list_scan_cancelled_label">Scan cancelled, no apps were loaded.</string>
     <string name="appcontrol_progress_uninstalling_app">Uninstalling app</string>
     <plurals name="appcontrol_uninstall_result_message_x">
@@ -113,7 +113,7 @@
         <item quantity="one">%d app was stopped</item>
         <item quantity="other">%d apps were stopped</item>
     </plurals>
-    <string name="appcontrol_automation_title">AppControl automation</string>
+    <string name="appcontrol_automation_title">App manager automation</string>
     <string name="appcontrol_automation_subtitle_force_stopping">Force stopping…</string>
     <string name="appcontrol_automation_progress_find_force_stop">Looking for \"Force stop\" button (keywords: %s)</string>
     <string name="appcontrol_automation_subtitle_archiving">Archiving…</string>

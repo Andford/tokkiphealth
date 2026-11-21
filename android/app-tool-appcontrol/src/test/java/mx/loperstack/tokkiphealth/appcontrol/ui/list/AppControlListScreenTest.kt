@@ -106,7 +106,7 @@ class AppControlListScreenTest : BaseComposeRobolectricTest() {
 
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // Top bar tool name is always visible.
-        composeRule.onNodeWithText("AppControl").assertExists()
+        composeRule.onNodeWithText("App manager").assertExists()
     }
 
     @Test
@@ -355,7 +355,7 @@ class AppControlListScreenTest : BaseComposeRobolectricTest() {
         )
 
         // Title replaced by the search field proves search really is open here.
-        composeRule.onAllNodesWithText("AppControl").assertCountEquals(0)
+        composeRule.onAllNodesWithText("App manager").assertCountEquals(0)
         composeRule.onNodeWithContentDescription("Cancel").assertExists()
     }
 
@@ -391,7 +391,7 @@ class AppControlListScreenTest : BaseComposeRobolectricTest() {
 
         composeRule.onAllNodesWithText("User").assertCountEquals(0)
         // Only the filter row is gated — the top bar (tool name) still renders.
-        composeRule.onNodeWithText("AppControl").assertExists()
+        composeRule.onNodeWithText("App manager").assertExists()
     }
 
     @Test
@@ -472,7 +472,7 @@ class AppControlListScreenTest : BaseComposeRobolectricTest() {
             ),
         )
 
-        composeRule.onAllNodesWithText("AppControl").assertCountEquals(0)
+        composeRule.onAllNodesWithText("App manager").assertCountEquals(0)
         composeRule.onAllNodesWithContentDescription("Help").assertCountEquals(0)
     }
 

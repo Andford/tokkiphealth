@@ -206,12 +206,12 @@
     <string name="support_contact_category_feature_label">Feature request</string>
     <string name="support_contact_category_question_label">Question</string>
     <string name="support_contact_tool_label">Related tool</string>
-    <string name="support_contact_tool_appcleaner_label">AppCleaner</string>
-    <string name="support_contact_tool_corpsefinder_label">CorpseFinder</string>
-    <string name="support_contact_tool_systemcleaner_label">SystemCleaner</string>
-    <string name="support_contact_tool_deduplicator_label">Deduplicator</string>
+    <string name="support_contact_tool_appcleaner_label">App caches</string>
+    <string name="support_contact_tool_corpsefinder_label">Leftovers</string>
+    <string name="support_contact_tool_systemcleaner_label">System cleaner</string>
+    <string name="support_contact_tool_deduplicator_label">Duplicates</string>
     <string name="support_contact_tool_analyzer_label">Analyzer</string>
-    <string name="support_contact_tool_appcontrol_label">AppControl</string>
+    <string name="support_contact_tool_appcontrol_label">App manager</string>
     <string name="support_contact_tool_scheduler_label">Scheduler</string>
     <string name="support_contact_tool_general_label">General</string>
     <string name="support_contact_description_label">Description</string>
@@ -421,7 +421,7 @@
     <string name="tour_dashboard_setup_body">The setup card appears when something needs configuring. Open it and resolve the issues so Tokkip Health can do more. You can also reach setup from settings, if you dismiss it.</string>
     <string name="tour_dashboard_tools_body">Open a tool\'s card for details. Scan and delete actions live on each card, details appear once a scan finds something.</string>
     <string name="tour_dashboard_main_action_body">The big button at the bottom is the one-tap action. One tap to scan, one tap to clean, all automatic tools.</string>
-    <string name="tour_dashboard_manual_tools_body">Some tools, like Swiper, aren\'t automatic, they offer a guided workflow you step through yourself.</string>
+    <string name="tour_dashboard_manual_tools_body">Some tools, like Swipe, aren\'t automatic, they offer a guided workflow you step through yourself.</string>
     <string name="tour_dashboard_settings_body">Tokkip Health\'s defaults are conservative and safe. Every device is a little different, so adjust the settings to get more out of it.</string>
 
     <string name="tour_setup_intro_body">Each card on this screen is a permission Tokkip Health can use. All are optional, but more permissions mean more features and more thorough scans. Without any, most tools will find little to clean.</string>

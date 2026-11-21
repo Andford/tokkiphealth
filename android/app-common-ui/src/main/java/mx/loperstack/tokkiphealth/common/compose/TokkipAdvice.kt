@@ -74,3 +74,21 @@ fun AdviceVerdict.color() = when (this) {
     AdviceVerdict.REVIEW -> MaterialTheme.colorScheme.tertiary
     AdviceVerdict.YOURS -> MaterialTheme.colorScheme.secondary
 }
+
+/** Tokkip's verdict as a small pill on a result row. */
+@Composable
+fun AdviceChip(verdict: AdviceVerdict, modifier: Modifier = Modifier) {
+    val accent = verdict.color()
+    Surface(
+        modifier = modifier,
+        color = accent.copy(alpha = 0.16f),
+        contentColor = accent,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Text(
+            text = verdict.label(),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
+}

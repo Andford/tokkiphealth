@@ -43,7 +43,7 @@ class AppCleanerListScreenTest : BaseComposeRobolectricTest() {
         // "Empty" must NOT render while rows is null (loading).
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
         // Tool name from the top bar is always visible.
-        composeRule.onNodeWithText("AppCleaner").assertExists()
+        composeRule.onNodeWithText("App caches").assertExists()
     }
 
     @Test
@@ -104,7 +104,7 @@ class AppCleanerListScreenTest : BaseComposeRobolectricTest() {
 
         composeRule.onNodeWithContentDescription("Search").performClick()
 
-        composeRule.onNodeWithText("AppCleaner").assertDoesNotExist()
+        composeRule.onNodeWithText("App caches").assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Help").assertDoesNotExist()
     }
 

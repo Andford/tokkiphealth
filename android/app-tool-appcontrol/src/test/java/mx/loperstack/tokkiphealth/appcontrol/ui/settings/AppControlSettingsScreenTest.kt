@@ -56,7 +56,7 @@ class AppControlSettingsScreenTest : BaseComposeRobolectricTest() {
     fun `top bar shows the AppControl title`() {
         composeRule.setSettingsScreen(AppControlSettingsViewModel.State())
 
-        composeRule.onNodeWithText("AppControl").assertExists()
+        composeRule.onNodeWithText("App manager").assertExists()
     }
 
     @Test

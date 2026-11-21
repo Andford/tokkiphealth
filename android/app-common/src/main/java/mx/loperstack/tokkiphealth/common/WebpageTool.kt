@@ -26,7 +26,9 @@ class WebpageTool @Inject constructor(
     companion object {
         fun open(context: Context, address: String): Boolean {
             val locales = context.resources.configuration.locales.let { list -> List(list.size()) { list[it] } }
-            val url = DocsUrls.localize(address, locales)
+            // SD Maid SE's help addresses go to Tokkip Health's own help (TokkipDocs).
+            val ours = TokkipDocs.redirect(address)
+            val url = if (ours != address) ours else DocsUrls.localize(address, locales)
             if (url != address) log(TAG) { "Localized $address to $url" }
             val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

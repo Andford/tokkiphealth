@@ -71,7 +71,7 @@ class SqueezerListScreenTest : BaseComposeRobolectricTest() {
         // SdmEmptyState text "Empty" must not appear during loading. Squeezer's strings put the
         // tool name as "Media Squeeze".
         composeRule.onAllNodesWithText("Empty").assertCountEquals(0)
-        composeRule.onNodeWithText("Media Squeeze").assertExists()
+        composeRule.onNodeWithText("Compress photos and videos").assertExists()
     }
 
     @Test

@@ -45,7 +45,7 @@ class SegmentExclusionEditorScreenTest : BaseComposeRobolectricTest() {
     }
 
     private fun ComposeContentTestRule.squeezerToggle() =
-        onNode(hasText("Media Squeeze") and isToggleable())
+        onNode(hasText("Compress photos and videos") and isToggleable())
 
     @Test
     fun `clicking the Media Squeeze toggle reports the SQUEEZER tag`() {
@@ -55,7 +55,7 @@ class SegmentExclusionEditorScreenTest : BaseComposeRobolectricTest() {
             onToggleTag = { toggled.add(it) },
         )
 
-        composeRule.onNodeWithText("Media Squeeze").performScrollTo()
+        composeRule.onNodeWithText("Compress photos and videos").performScrollTo()
         composeRule.squeezerToggle().performClick()
 
         composeRule.waitForIdle()
