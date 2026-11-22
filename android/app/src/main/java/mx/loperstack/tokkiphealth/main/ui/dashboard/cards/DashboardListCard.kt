@@ -9,8 +9,24 @@ internal fun DashboardListCard(
     modifier: Modifier = Modifier,
     item: DashboardItem,
     mascotTopBump: Int = 0,
+    order: Int = 0,
 ) {
+    // Tools are bento tiles (BentoTiles.kt); everything else is a full-width card that pops in too.
+    if (item.isTile()) {
+        DashboardTile(item, order)
+        return
+    }
+    if (item is HistoryDashboardCardItem) {
+        HistoryDashboardCard(item, order)
+        return
+    }
+    Appear(order) { FullCard(modifier, item, mascotTopBump) }
+}
+
+@Composable
+private fun FullCard(modifier: Modifier, item: DashboardItem, mascotTopBump: Int) {
     when (item) {
+        is HistoryDashboardCardItem -> Unit
         is TitleDashboardCardItem -> TitleDashboardCard(
             item = item,
             mascotTopBump = mascotTopBump,

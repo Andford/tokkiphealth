@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.isTile
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.CircularProgressIndicator
@@ -543,7 +545,8 @@ internal fun DashboardScreen(
                     dockBottom
                 }
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(390.dp),
+                    // Tokkip's bento: tools are tiles, two to a row on a phone; the rest spans the row.
+                    columns = GridCells.Adaptive(170.dp),
                     state = gridState,
                     modifier = Modifier
                         .focusRequester(gridFocusRequester)
@@ -585,6 +588,7 @@ internal fun DashboardScreen(
                     items(
                         items = items,
                         key = { it.stableId },
+                        span = { GridItemSpan(if (it.isTile()) 1 else maxLineSpan) },
                         // Distinct card shapes (sealed subtypes) so Compose pools same-shaped slots
                         // and reuses a matching node tree instead of rebuilding mid-fling.
                         contentType = { it::class },
@@ -613,6 +617,7 @@ internal fun DashboardScreen(
                             DashboardListCard(
                                 item = item,
                                 mascotTopBump = mascotTopBump,
+                                order = items.indexOf(item),
                             )
                         }
                     }

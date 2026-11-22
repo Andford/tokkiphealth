@@ -38,6 +38,8 @@ import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.SetupDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.SqueezerDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.StatsDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.TitleDashboardCardItem
+import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.HistoryDashboardCardItem
+import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.CleanEntry
 import mx.loperstack.tokkiphealth.main.core.health.PhoneHealth
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.ToolDashboardCardItem
 import mx.loperstack.tokkiphealth.main.ui.dashboard.cards.UpdateDashboardCardItem
@@ -142,6 +144,15 @@ internal fun DashboardViewModel.buildTitleCardItem(): Flow<TitleDashboardCardIte
             val action = bottomBarState.value?.actionState ?: BottomBarState.Action.SCAN
             mainAction(action)
         },
+        history = HistoryDashboardCardItem.build(
+            cleans = reports
+                .filter { (it.affectedSpace ?: 0L) > 0L }
+                .map { CleanEntry(it.tool, it.affectedSpace ?: 0L, it.endAt) },
+            totalFreed = stats?.totalSpaceFreed ?: 0L,
+            today = java.time.LocalDate.now(),
+            zone = java.time.ZoneId.systemDefault(),
+            onOpen = { navTo(ReportsRoute) },
+        ),
     )
 }
 

@@ -441,4 +441,15 @@
     <string name="dashboard_health_action">Revisar mi teléfono</string>
     <string name="dashboard_health_working">Trabajando…</string>
     <string name="tokkip_note_clean">Liberé %1$s en tu teléfono</string>
+    <string name="dashboard_tile_apps_count">%1$d apps instaladas</string>
+    <string name="dashboard_tile_scheduler_subtitle">Limpia solo, cuando tú le digas</string>
+    <string name="dashboard_history_title">Tu historial de limpieza</string>
+    <plurals name="dashboard_history_freed_in_x">
+        <item quantity="one">en %1$d limpieza</item>
+        <item quantity="many">en %1$d limpiezas</item>
+        <item quantity="other">en %1$d limpiezas</item>
+    </plurals>
+    <string name="dashboard_history_two_weeks">Hace 2 semanas</string>
+    <string name="dashboard_history_today">Hoy</string>
+    <string name="dashboard_history_empty">Todavía nada. Tu primera limpieza va a salir aquí.</string>
 </resources>

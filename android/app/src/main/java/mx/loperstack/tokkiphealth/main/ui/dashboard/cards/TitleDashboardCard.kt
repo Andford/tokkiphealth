@@ -62,6 +62,8 @@ data class TitleDashboardCardItem(
     val onMascotTriggered: (Boolean) -> Unit,
     val health: PhoneHealth? = null,
     val onClean: () -> Unit = {},
+    /** Tokkip's cleaning history, shown right below as its own card. */
+    val history: HistoryDashboardCardItem? = null,
 ) : DashboardItem {
     override val stableId: Long = this.javaClass.hashCode().toLong()
 }
@@ -76,7 +78,7 @@ internal fun TitleDashboardCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(6.dp),
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
@@ -93,6 +95,8 @@ internal fun TitleDashboardCard(
                         },
                         face = if (h?.mood == PhoneHealth.Mood.DIZZY && !item.isWorking) TokkipEngine.Eye.SPIRAL else null,
                         wear = true,
+                        // He dances for a little while after a clean.
+                        dancing = !item.isWorking && h?.lastCleanAt?.let { Duration.between(it, Instant.now()).toMinutes() < 2 } == true,
                         jump = mascotTopBump,
                         interactive = !still,
                         greet = !still,
@@ -226,7 +230,7 @@ private fun levelColor(level: PhoneHealth.Level): Color = when (level) {
 
 @Composable
 private fun ScoreRing(score: Int) {
-    val sweep by animateFloatAsState(targetValue = score / 100f, animationSpec = tween(900), label = "score")
+    val sweep by animateFloatAsState(targetValue = score / 100f, animationSpec = TokkipBounce, label = "score")
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     val fill = levelColor(
         when {
@@ -249,7 +253,7 @@ private fun ScoreRing(score: Int) {
             drawArc(track, -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
             drawArc(fill, -90f, 360f * sweep, false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
         }
-        Text(text = "$score", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(text = "${(sweep * 100).toInt().coerceIn(0, 100)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
 }
 

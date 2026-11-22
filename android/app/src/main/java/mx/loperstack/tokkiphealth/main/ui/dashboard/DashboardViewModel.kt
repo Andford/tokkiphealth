@@ -358,6 +358,7 @@ class DashboardViewModel @Inject constructor(
         swiperItem: SwiperDashboardCardItem?,
         cardConfig: DashboardCardConfig ->
         val items = mutableListOf<DashboardItem>(titleInfo)
+        titleInfo.history?.let { items.add(it) }
 
         val noError = dataAreaError == null
 
@@ -404,7 +405,8 @@ class DashboardViewModel @Inject constructor(
                 DashboardCardType.SQUEEZER -> squeezerItem?.let { items.add(it) }
                 DashboardCardType.ANALYZER -> analyzerItem?.let { items.add(it) }
                 DashboardCardType.SCHEDULER -> schedulerItem?.let { items.add(it) }
-                DashboardCardType.STATS -> statsItem?.let { items.add(it) }
+                // The cleaning history under Tokkip already shows this.
+                DashboardCardType.STATS -> Unit
             }
         }
 

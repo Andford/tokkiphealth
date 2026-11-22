@@ -512,4 +512,14 @@
     <string name="dashboard_health_action">Check my phone</string>
     <string name="dashboard_health_working">Working…</string>
     <string name="tokkip_note_clean">I freed %1$s on your phone</string>
+    <string name="dashboard_tile_apps_count">%1$d apps installed</string>
+    <string name="dashboard_tile_scheduler_subtitle">Cleans on its own, when you say</string>
+    <string name="dashboard_history_title">Your cleaning history</string>
+    <plurals name="dashboard_history_freed_in_x">
+        <item quantity="one">in %1$d clean</item>
+        <item quantity="other">in %1$d cleans</item>
+    </plurals>
+    <string name="dashboard_history_two_weeks">2 weeks ago</string>
+    <string name="dashboard_history_today">Today</string>
+    <string name="dashboard_history_empty">Nothing yet. Your first clean will show up here.</string>
 </resources>
