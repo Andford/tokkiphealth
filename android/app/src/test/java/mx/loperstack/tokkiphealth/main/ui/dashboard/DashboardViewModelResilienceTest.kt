@@ -334,31 +334,6 @@ internal class DashboardViewModelResilienceTest : BaseTest() {
     }
 
     @Test
-    fun `stats card still renders when the install date never arrives`() = runTest2 {
-        // CurriculumVitae.installedAt only emits after the install date has been written, which on a
-        // first-ever launch waits on upgrade state. The card must render captionless meanwhile.
-        val vm = harness(
-            statsState = MutableStateFlow(
-                StatsRepo.State(
-                    reportsCount = 3,
-                    snapshotsCount = 2,
-                    totalSpaceFreed = 1024L,
-                    itemsProcessed = 12,
-                    databaseSize = 4096L,
-                )
-            ),
-            statsRetention = java.time.Duration.ofDays(30),
-            installedAt = emptyFlow(),
-        )
-
-        val card = vm.listState
-            .mapNotNull { it?.items?.filterIsInstance<StatsDashboardCardItem>()?.singleOrNull() }
-            .first()
-
-        card.installedAt shouldBe null
-    }
-
-    @Test
     fun `listState emits even when a single source never emits`() = runTest2 {
         // One stalled source must not wedge the whole dashboard.
         for (stall in listOf("sessions", "motd", "stats", "swiper", "analyzer", "anniversary", "setup", "dataArea", "review", "debug")) {

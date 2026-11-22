@@ -158,7 +158,9 @@ internal fun ToolTile(item: ToolDashboardCardItem, order: Int) {
                 },
             ) {
                 AnimatedContent(targetState = icon, transitionSpec = { (scaleIn(TokkipBounce) + fadeIn()) togetherWith fadeOut() }, label = "action") {
-                    Icon(imageVector = it, contentDescription = stringResource(if (it == Icons.TwoTone.Delete) CommonR.string.general_delete_action else if (it == Icons.TwoTone.Cancel) CommonR.string.general_cancel_action else CommonR.string.general_scan_action))
+                    // Named with the tool, so it never reads like the dock's own buttons.
+                    val action = stringResource(if (it == Icons.TwoTone.Delete) CommonR.string.general_delete_action else if (it == Icons.TwoTone.Cancel) CommonR.string.general_cancel_action else CommonR.string.general_scan_action)
+                    Icon(imageVector = it, contentDescription = "$action · $name")
                 }
             }
         }

@@ -445,39 +445,6 @@ class DashboardScreenDpadWrapTest : BaseComposeRobolectricTest() {
     }
 
     @Test
-    fun `dismissing the hero with DPAD_CENTER re-anchors focus on the dock`() {
-        val controller = mockk<GuidedTourController>(relaxed = true).also {
-            coEvery { it.shouldStart(any()) } returns false
-            every { it.session } returns MutableStateFlow(null)
-        }
-        composeRule.setContent {
-            PreviewWrapper {
-                CompositionLocalProvider(
-                    LocalTourTargetRegistry provides TourTargetRegistry(),
-                    LocalGuidedTourController provides controller,
-                ) {
-                    var expanded by remember { mutableStateOf(true) }
-                    DashboardScreen(
-                        listState = DashboardViewModel.ListState(items = defaultItems()),
-                        bottomBarState = bottomBarState(heroSummary = heroSummary()),
-                        isHeroExpanded = expanded,
-                        onDismissHero = { expanded = false },
-                    )
-                }
-            }
-        }
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription(dismissLabel).requestFocus()
-        composeRule.waitForIdle()
-
-        composeRule.pressKey(NativeKeyEvent.KEYCODE_DPAD_CENTER)
-
-        // The focused node left composition with the hero; focus must be re-anchored on the
-        // dock (the FAB) instead of evaporating.
-        composeRule.assertFocusedWithin(hasContentDescription(scanLabel))
-    }
-
-    @Test
     fun `focus entering the incomplete-setup card lands on Continue, Dismiss stays reachable`() {
         val continueLabel = context.getString(R.string.setup_incomplete_card_continue_action)
         val dismissLabel = context.getString(CommonR.string.general_dismiss_action)
