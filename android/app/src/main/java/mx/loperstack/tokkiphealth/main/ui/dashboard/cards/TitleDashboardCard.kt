@@ -5,6 +5,11 @@ import android.text.format.Formatter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import mx.loperstack.tokkip.character.PolygonShape
+import mx.loperstack.tokkip.character.MShapes
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,9 +89,18 @@ internal fun TitleDashboardCard(
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(width = 120.dp, height = 100.dp), contentAlignment = Alignment.Center) {
+                // Tokkip on his cookie, like the app icon. He needs a width and a height:
+                // his canvas fills the box it gets.
+                val cookie = remember { PolygonShape(MShapes.Cookie9) }
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(cookie)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Tokkip(
-                        modifier = Modifier.height(100.dp),
+                        modifier = Modifier.size(width = 92.dp, height = 78.dp),
                         mood = when {
                             item.isWorking -> Mood.FOCUS
                             h?.mood == PhoneHealth.Mood.HAPPY -> Mood.HAPPY
@@ -111,7 +125,7 @@ internal fun TitleDashboardCard(
                     )
                     Text(
                         text = stringResource(h?.let { moodTitle(it.mood) } ?: R.string.dashboard_health_looking),
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                 }

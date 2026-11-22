@@ -1,6 +1,8 @@
 package mx.loperstack.tokkiphealth.common.compose
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,8 +46,16 @@ fun TokkipAdviceCard(
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(width = 72.dp, height = 60.dp), contentAlignment = Alignment.Center) {
-                Tokkip(modifier = Modifier.height(60.dp), mood = mood, interactive = !still)
+            // Tokkip on his cookie; he needs both a width and a height.
+            val cookie = androidx.compose.runtime.remember { mx.loperstack.tokkip.character.PolygonShape(mx.loperstack.tokkip.character.MShapes.Cookie9) }
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(cookie)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+                contentAlignment = Alignment.Center,
+            ) {
+                Tokkip(modifier = Modifier.size(width = 62.dp, height = 52.dp), mood = mood, interactive = !still)
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

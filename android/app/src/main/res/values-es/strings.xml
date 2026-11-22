@@ -437,7 +437,7 @@
     <string name="dashboard_health_stat_clean_label">Última limpieza</string>
     <string name="dashboard_health_stat_clean_never">Todavía no</string>
     <string name="dashboard_health_stat_clean_now">Ahorita</string>
-    <string name="dashboard_health_stat_freed_label">Liberado con Tokkip</string>
+    <string name="dashboard_health_stat_freed_label">Liberado</string>
     <string name="dashboard_health_action">Revisar mi teléfono</string>
     <string name="dashboard_health_working">Trabajando…</string>
     <string name="tokkip_note_clean">Liberé %1$s en tu teléfono</string>
