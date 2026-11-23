@@ -146,10 +146,10 @@ private fun moodLong(m: PhoneHealth.Mood) = when (m) {
 private fun lastClean(context: Context, h: PhoneHealth): String {
     val at = h.lastCleanAt ?: return context.getString(R.string.dashboard_health_stat_clean_never)
     val now = System.currentTimeMillis()
-    val ago = if (now - at.toEpochMilli() < DateUtils.MINUTE_MILLIS) {
+    val ago = if (now - at.toEpochMilli() < DateUtils.MINUTE_IN_MILLIS) {
         context.getString(R.string.dashboard_health_stat_clean_now)
     } else {
-        DateUtils.getRelativeTimeSpanString(at.toEpochMilli(), now, DateUtils.MINUTE_MILLIS).toString()
+        DateUtils.getRelativeTimeSpanString(at.toEpochMilli(), now, DateUtils.MINUTE_IN_MILLIS).toString()
     }
     return ago
 }
