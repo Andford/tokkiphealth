@@ -300,7 +300,9 @@ private fun Mascot(size: Dp, modifier: GlanceModifier = GlanceModifier, data: Wi
     }
     val px = (size.value * context.resources.displayMetrics.density).toInt().coerceIn(1, 220)
     Image(
-        provider = ImageProvider(TokkipWidgetKit.onCookie(context, px, mood, face)),
+        // The app icon (Tokkip too) if he can't be drawn here, e.g. in a unit test without a canvas.
+        provider = runCatching { ImageProvider(TokkipWidgetKit.onCookie(context, px, mood, face)) }
+            .getOrElse { ImageProvider(R.mipmap.ic_launcher_round) },
         contentDescription = null,
         modifier = GlanceModifier.size(size).then(modifier),
     )
