@@ -24,6 +24,14 @@ class WidgetUpdater @Inject constructor(
 ) {
 
     suspend fun updateAll() {
+        // Tokkip's own widgets (Tu teléfono, Historial) follow the same moments: app start, cleans.
+        try {
+            mx.loperstack.tokkiphealth.widget.tokkip.TokkipWidgets.updateAll(context)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log(TAG, WARN) { "Tokkip widgets: ${e.asLog()}" }
+        }
         try {
             val ids = GlanceAppWidgetManager(context).getGlanceIds(SdmHomeWidget::class.java)
             if (ids.isEmpty()) {

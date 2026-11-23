@@ -43,6 +43,9 @@ import mx.loperstack.tokkiphealth.R
 import mx.loperstack.tokkiphealth.main.ui.MainActivity
 import mx.loperstack.tokkiphealth.main.ui.shortcuts.ShortcutActivity
 import mx.loperstack.tokkiphealth.widget.WidgetRenderState
+import mx.loperstack.tokkiphealth.widget.tokkip.TokkipWidgetKit
+import mx.loperstack.tokkip.character.Mood
+import mx.loperstack.tokkip.character.TokkipEngine
 import androidx.glance.color.ColorProvider as dayNightColorProvider
 import mx.loperstack.tokkiphealth.common.R as CommonR
 import mx.loperstack.tokkiphealth.common.ui.R as CommonUiR
@@ -167,8 +170,8 @@ private fun WidgetChrome(content: @Composable () -> Unit) {
             modifier = GlanceModifier
                 .fillMaxSize()
                 .appWidgetBackground()
-                .background(GlanceTheme.colors.background)
-                .cornerRadius(20.dp)
+                .background(GlanceTheme.colors.widgetBackground)
+                .cornerRadius(28.dp)
                 .padding(horizontal = 14.dp, vertical = WIDGET_CHROME_VERTICAL_PADDING),
         ) {
             content()
@@ -184,7 +187,7 @@ private fun WidgetChrome(content: @Composable () -> Unit) {
 @Composable
 internal fun StackedLayout(data: WidgetRenderState.Data) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        BrandingHeader(data.freedBytes, GlanceModifier.fillMaxWidth().clickable(openApp()))
+        BrandingHeader(data, GlanceModifier.fillMaxWidth().clickable(openApp()))
         Spacer(GlanceModifier.height(12.dp))
         Column(modifier = GlanceModifier.fillMaxWidth().clickable(openAnalyzer())) {
             data.storages.forEachIndexed { index, entry ->
@@ -211,7 +214,7 @@ internal fun ValueRowLayout(data: WidgetRenderState.Data, showButtonLabel: Boole
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Mascot(40.dp, GlanceModifier.clickable(openApp()))
+        Mascot(44.dp, GlanceModifier.clickable(openApp()), data)
         Spacer(GlanceModifier.width(12.dp))
         Column(modifier = GlanceModifier.defaultWeight().clickable(openAnalyzer())) {
             data.storages.firstOrNull()?.let { entry ->
@@ -251,7 +254,7 @@ private fun RingRowLayout(data: WidgetRenderState.Data) {
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Mascot(NARROW_ELEMENT_SIZE, GlanceModifier.clickable(openApp()))
+        Mascot(NARROW_ELEMENT_SIZE, GlanceModifier.clickable(openApp()), data)
         Spacer(GlanceModifier.defaultWeight())
         Box(modifier = GlanceModifier.size(NARROW_ELEMENT_SIZE).clickable(openAnalyzer())) {
             data.storages.firstOrNull()?.let { StorageRing(it.usedRatio, NARROW_ELEMENT_SIZE, it.isLow) }
@@ -262,15 +265,16 @@ private fun RingRowLayout(data: WidgetRenderState.Data) {
 }
 
 @Composable
-private fun BrandingHeader(freedBytes: Long, modifier: GlanceModifier = GlanceModifier) {
+private fun BrandingHeader(data: WidgetRenderState.Data, modifier: GlanceModifier = GlanceModifier) {
     val context = LocalContext.current
+    val freedBytes = data.freedBytes
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Mascot(42.dp)
+        Mascot(48.dp, data = data)
         Spacer(GlanceModifier.width(10.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
                 text = context.getString(R.string.widget_home_title),
-                style = TextStyle(color = GlanceTheme.colors.onBackground, fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
             )
             Spacer(GlanceModifier.height(2.dp))
@@ -283,10 +287,20 @@ private fun BrandingHeader(freedBytes: Long, modifier: GlanceModifier = GlanceMo
     }
 }
 
+/** Tokkip on his cookie: focused while cleaning, dizzy when space runs low, happy otherwise. */
 @Composable
-private fun Mascot(size: Dp, modifier: GlanceModifier = GlanceModifier) {
+private fun Mascot(size: Dp, modifier: GlanceModifier = GlanceModifier, data: WidgetRenderState.Data? = null) {
+    val context = LocalContext.current
+    val low = data?.storages?.any { it.isLow } == true
+    val (mood, face) = when {
+        data == null -> Mood.IDLE to null
+        data.isWorking -> Mood.FOCUS to null
+        low -> Mood.IDLE to TokkipEngine.Eye.SPIRAL
+        else -> Mood.HAPPY to null
+    }
+    val px = (size.value * context.resources.displayMetrics.density).toInt().coerceIn(1, 220)
     Image(
-        provider = ImageProvider(R.mipmap.ic_launcher_round),
+        provider = ImageProvider(TokkipWidgetKit.onCookie(context, px, mood, face)),
         contentDescription = null,
         modifier = GlanceModifier.size(size).then(modifier),
     )
@@ -351,7 +365,7 @@ private fun StorageBar(ratio: Float, isLow: Boolean = false) {
     val context = LocalContext.current
     LinearProgressIndicator(
         progress = ratio,
-        modifier = GlanceModifier.fillMaxWidth().height(8.dp).cornerRadius(4.dp),
+        modifier = GlanceModifier.fillMaxWidth().height(10.dp).cornerRadius(5.dp),
         // IMPORTANT: Glance (1.2.0-rc01) only applies a custom LinearProgressIndicator tint on
         // API 31+ — below that this argument compiles and is then silently ignored, so the bar stays
         // the default colour. minSdk is 26, which means on Android 8-11 the amber BAR never renders
@@ -399,9 +413,9 @@ private fun CleanButton(modifier: GlanceModifier = GlanceModifier, showLabel: Bo
     Row(
         modifier = modifier
             .background(bg)
-            .cornerRadius(22.dp)
+            .cornerRadius(24.dp)
             .clickable(mode.action())
-            .padding(horizontal = if (showLabel) 16.dp else 12.dp, vertical = 9.dp),
+            .padding(horizontal = if (showLabel) 18.dp else 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -421,7 +435,7 @@ private fun CleanButton(modifier: GlanceModifier = GlanceModifier, showLabel: Bo
             Spacer(GlanceModifier.width(6.dp))
             Text(
                 text = label,
-                style = TextStyle(color = fg, fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                style = TextStyle(color = fg, fontSize = 14.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
             )
         }
@@ -465,7 +479,7 @@ private fun UnavailableContent() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Mascot(28.dp)
+        Mascot(40.dp)
         Spacer(GlanceModifier.height(6.dp))
         Text(
             text = context.getString(R.string.widget_home_unavailable),

@@ -165,6 +165,8 @@ class ShortcutActivity : ComponentActivity() {
         const val ACTION_SCAN_DELETE = "mx.loperstack.tokkiphealth.ACTION_SCAN_DELETE"
         const val ACTION_CANCEL_ONECLICK = "mx.loperstack.tokkiphealth.ACTION_CANCEL_ONECLICK"
         const val ACTION_UPGRADE = "mx.loperstack.tokkiphealth.ACTION_UPGRADE"
+        /** From Tokkip's history widget: straight to the cleaning reports. */
+        const val ACTION_OPEN_REPORTS = "mx.loperstack.tokkiphealth.ACTION_OPEN_REPORTS"
 
         /** Widget Clean button → this activity (explicit component, not in the exported filter). */
         const val ACTION_WIDGET_SCAN_DELETE = "mx.loperstack.tokkiphealth.ACTION_WIDGET_SCAN_DELETE"

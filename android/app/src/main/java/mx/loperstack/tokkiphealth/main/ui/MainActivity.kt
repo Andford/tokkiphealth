@@ -297,6 +297,7 @@ class MainActivity : ComponentActivity() {
             ShortcutActivity.ACTION_OPEN_APPCONTROL -> AppControlListRoute
             ShortcutActivity.ACTION_OPEN_ANALYZER -> DeviceStorageRoute
             ShortcutActivity.ACTION_UPGRADE -> UpgradeRoute()
+            ShortcutActivity.ACTION_OPEN_REPORTS -> mx.loperstack.tokkiphealth.stats.ui.ReportsRoute
             else -> null
         }
 

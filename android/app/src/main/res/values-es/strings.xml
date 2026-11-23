@@ -452,4 +452,15 @@
     <string name="dashboard_history_two_weeks">Hace 2 semanas</string>
     <string name="dashboard_history_today">Hoy</string>
     <string name="dashboard_history_empty">Todavía nada. Tu primera limpieza va a salir aquí.</string>
+    <string name="widget_tokkip_health_title">Tokkip: tu teléfono</string>
+    <string name="widget_tokkip_health_description">Cómo se siente tu teléfono, según Tokkip</string>
+    <string name="widget_tokkip_history_title">Historial de limpieza</string>
+    <string name="widget_tokkip_history_description">Lo que Tokkip liberó en las últimas dos semanas</string>
+    <string name="widget_tokkip_history_short">Liberado con Tokkip</string>
+    <string name="widget_tokkip_mood_happy">De maravilla</string>
+    <string name="widget_tokkip_mood_calm">Va bien</string>
+    <string name="widget_tokkip_mood_tired">Cansado</string>
+    <string name="widget_tokkip_mood_dizzy">Mareado</string>
+    <string name="widget_tokkip_free">%1$s libres</string>
+    <string name="widget_tokkip_last_clean">Última limpieza: %1$s</string>
 </resources>
