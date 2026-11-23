@@ -6,6 +6,7 @@ import { loadLook, saveLook, type Species } from "../tokkip/tokkip";
 import { LANGUAGES, language, N_, setLanguage, t } from "../i18n/i18n";
 import { Sound } from "../core/sound";
 import { Icon } from "../ui/Icon";
+import { OldVersion } from "../ui/OldVersion";
 
 const MODES: readonly { id: ThemeMode; label: string }[] = [
   { id: "system", label: N_("Like Windows") },
@@ -38,6 +39,7 @@ export function Settings() {
   return (
     <>
       <h1 class="display page-title">{t("Settings")}</h1>
+      <OldVersion />
 
       <section class="card setting">
         <h2>

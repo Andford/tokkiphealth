@@ -75,7 +75,7 @@ Cada fase termina con una versión instalable.
 - [x] Quitar bloatware (apps preinstaladas de Windows, con lista curada).
 - [x] Actualizaciones de programas (winget).
 - [x] Actualizaciones de controladores (Windows Update, con prioridad y punto de restauración).
-- [ ] Menú contextual: entradas viejas o rotas.
+- [x] Menú contextual: entradas viejas o rotas (apagar y prender como Windows; quitar las rotas con respaldo).
 
 ### Fase 4 — Rendimiento (0.8)
 - [x] Monitor: CPU, memoria, disco, red, temperaturas, procesos.
@@ -85,7 +85,7 @@ Cada fase termina con una versión instalable.
 
 ### Fase 5 — Protección (0.9)
 - [x] Antivirus con Windows Defender: estado, escaneo rápido, definiciones y lo que encontró.
-- [ ] Heurísticas propias y reglas YARA.
+- [x] Heurísticas propias y reglas YARA (Revisión de Tokkip: `rules/yara/tokkip.yar` con boreal, cuarentena que se regresa, archivo hosts).
 - [x] Privacidad: rastros (recientes, historial de ejecución), telemetría de
       Windows con interruptores explicados, con nivel y qué pierdes.
 - [x] Firewall: perfiles apagados y reglas de programas que ya no están.
@@ -98,4 +98,4 @@ Cada fase termina con una versión instalable.
 - [x] Puntos de restauración y actividad (qué se hizo y cuándo).
 - [x] Limpieza semanal (Programador de tareas de Windows).
 - [x] Aviso a Tokkip PC (`%APPDATA%\Tokkip\shared\healthy-pc.json`).
-- [ ] Pasar los ajustes de la versión anterior y reemplazarla.
+- [x] Pasar los ajustes de la versión anterior y reemplazarla (un botón en Inicio y Ajustes: trae tema, idioma, limpieza programada, modo juego y lo liberado; desinstala la anterior, su tarea y su entrada de inicio).

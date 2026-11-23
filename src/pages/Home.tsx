@@ -13,6 +13,7 @@ import { openTab as openSoftware } from "./Software";
 import { openTab as openProtection } from "./Protection";
 import { openTab as openPerformance } from "./Performance";
 import { openTab as openCare } from "./Care";
+import { OldVersion } from "../ui/OldVersion";
 import { Icon } from "../ui/Icon";
 import { Tokkip } from "../ui/Tokkip";
 import type { Page } from "../App";
@@ -55,6 +56,8 @@ export function Home({ go }: { go: (p: Page) => void }) {
         </div>
         {h && <Score value={h.score} />}
       </section>
+
+      <OldVersion />
 
       {h && (
         <section class="grid">

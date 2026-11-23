@@ -744,5 +744,17 @@
   "Tokkip looked for malware ({count} to look at)": "Tokkip buscó malware ({count} por revisar)",
   "Moved {count} files to quarantine": "Movió {count} archivos a cuarentena",
   "Put the hosts file back in order": "Puso en orden el archivo hosts",
-  "Hosts file": "Archivo hosts"
+  "Hosts file": "Archivo hosts",
+  "Done: your settings are here and the old version is gone. Its data stays in its folder, untouched.": "Listo: tus ajustes ya están aquí y la versión anterior ya no está. Sus datos se quedan en su carpeta, sin tocar.",
+  "Your settings are here. The old version is still installed: Windows asked first, and it wasn't removed.": "Tus ajustes ya están aquí. La versión anterior sigue instalada: Windows preguntó primero y no se quitó.",
+  "The old Tokkip Healthy PC is still here": "La versión anterior de Tokkip Healthy PC sigue aquí",
+  "This one already does everything it did. Bring your settings over and uninstall it, in one go.": "Esta ya hace todo lo que hacía aquella. Trae tus ajustes y desinstálala, de una vez.",
+  "It freed {size} in {n} clean: that's added to what Tokkip has freed with you.": "Liberó {size} en {n} limpieza: se suma a lo que Tokkip ha liberado contigo.",
+  "It freed {size} in {n} cleans: that's added to what Tokkip has freed with you.": "Liberó {size} en {n} limpiezas: se suma a lo que Tokkip ha liberado contigo.",
+  "Its scheduled clean becomes the weekly clean.": "Su limpieza programada pasa a ser la limpieza semanal.",
+  "Bring over and uninstall": "Traer y desinstalar",
+  "Bring my settings over": "Traer mis ajustes",
+  "Brought the old version's settings over": "Trajo los ajustes de la versión anterior",
+  "Uninstalled the old version": "Desinstaló la versión anterior",
+  "Old version": "Versión anterior"
 }

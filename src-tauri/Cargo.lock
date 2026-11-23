@@ -3946,7 +3946,7 @@ dependencies = [
 
 [[package]]
 name = "tokkip-healthy"
-version = "0.9.1"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "boreal",

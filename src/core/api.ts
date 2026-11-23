@@ -1027,6 +1027,34 @@ export async function hostsFix(): Promise<number> {
   return invoke<number>("hosts_fix");
 }
 
+// ── La versión anterior ──────────────────────────────────────────────────
+
+export interface OldPlan {
+  theme: "system" | "light" | "dark" | null;
+  language: "es" | "en" | null;
+  routine: Routine | null;
+  game: unknown;
+  freed: number;
+  cleans: number;
+  lastClean: number;
+}
+export interface OldVersion {
+  data: boolean;
+  installed: boolean;
+  plan: OldPlan | null;
+}
+export async function oldVersion(): Promise<OldVersion> {
+  if (!inApp) return { data: true, installed: true, plan: { theme: "dark", language: "es", routine: { on: true, day: 6, hour: 21 }, game: {}, freed: 12_400_000_000, cleans: 23, lastClean: Date.now() - 9 * 86_400_000 } };
+  return invoke<OldVersion>("old_version");
+}
+export async function oldVersionReplace(): Promise<{ plan: OldPlan | null; uninstalled: boolean }> {
+  if (!inApp) {
+    await wait(1500);
+    return { plan: (await oldVersion()).plan, uninstalled: true };
+  }
+  return invoke("old_version_replace");
+}
+
 // ── Mantenimiento ────────────────────────────────────────────────────────
 
 export interface Orphan {

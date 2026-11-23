@@ -337,7 +337,7 @@ mod tests {
     fn the_rules_compile_and_match_the_table() {
         scanner().expect("rules compile");
         for (name, _, _) in RULES.iter() {
-            assert!(RULES_SRC.contains(&format!("rule {name}\n")), "{name} is in tokkip.yar");
+            assert!(RULES_SRC.lines().any(|l| l.trim() == format!("rule {name}")), "{name} is in tokkip.yar");
         }
         let in_file = RULES_SRC.matches("\nrule ").count();
         assert_eq!(in_file, RULES.len(), "every rule has a row");

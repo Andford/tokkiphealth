@@ -5,6 +5,7 @@
 
 mod fsx;
 mod health;
+mod legacy;
 mod notice;
 mod platform;
 mod profile;
@@ -1377,6 +1378,10 @@ fn routine_get(dirs: tauri::State<Dirs>) -> tools::care::Routine {
 /// Turns the weekly clean on (at that day and hour) or off.
 #[tauri::command]
 fn routine_set(dirs: tauri::State<Dirs>, routine: tools::care::Routine) -> Result<(), String> {
+    set_routine(&dirs.data, routine)
+}
+
+fn set_routine(data: &std::path::Path, routine: tools::care::Routine) -> Result<(), String> {
     let ok = if routine.on {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?.display().to_string();
         let args = tools::care::task_args(&routine, &exe);
@@ -1389,10 +1394,118 @@ fn routine_set(dirs: tauri::State<Dirs>, routine: tools::care::Routine) -> Resul
     if !ok {
         return Err("schtasks".into());
     }
-    store::save_json(&dirs.data, ROUTINE_FILE, &routine);
-    act(&dirs.data, "routine", if routine.on { "on" } else { "off" }, 0, 1);
+    store::save_json(data, ROUTINE_FILE, &routine);
+    act(data, "routine", if routine.on { "on" } else { "off" }, 0, 1);
     Ok(())
 }
+
+// ── La versión anterior ───────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OldVersion {
+    /// Its settings are here and haven't been brought over.
+    data: bool,
+    /// It's still installed.
+    installed: bool,
+    plan: Option<legacy::Plan>,
+}
+
+fn appdata() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(PathBuf::from)
+}
+
+#[tauri::command]
+async fn old_version(dirs: tauri::State<'_, Dirs>) -> Result<OldVersion, String> {
+    let data = dirs.data.clone();
+    blocking(move || {
+        let dir = appdata().and_then(|a| legacy::pending(&a, &data));
+        OldVersion { data: dir.is_some(), installed: legacy::installed().is_some(), plan: dir.map(|d| legacy::read_plan(&d)) }
+    })
+    .await
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Replaced {
+    /// What was brought over (the page applies the theme and language).
+    plan: Option<legacy::Plan>,
+    /// Its uninstaller ran (you may have said no to Windows' question).
+    uninstalled: bool,
+}
+
+/// Brings the old app's settings over (once), then uninstalls it: its startup task and
+/// Run entry go too. Its data stays where it was.
+#[tauri::command]
+async fn old_version_replace(dirs: tauri::State<'_, Dirs>) -> Result<Replaced, String> {
+    let data = dirs.data.clone();
+    blocking(move || {
+        let mut plan = None;
+        if let Some(dir) = appdata().and_then(|a| legacy::pending(&a, &data)) {
+            let p = legacy::read_plan(&dir);
+            if let Some(r) = p.routine.clone() {
+                let _ = set_routine(&data, r);
+            }
+            if let Some(g) = p.game.clone() {
+                if !data.join(GAME_CONFIG).exists() {
+                    store::save_json(&data, GAME_CONFIG, &g);
+                }
+            }
+            if p.freed > 0 {
+                let mut m = store::load(&data);
+                m.total_freed += p.freed;
+                m.cleans += p.cleans;
+                if p.last_clean > m.last_clean {
+                    m.last_clean = p.last_clean;
+                }
+                store::save(&data, &m);
+            }
+            store::save_json(&data, legacy::DONE_FILE, &serde_json::json!({ "at": store::now_ms(), "from": dir.display().to_string(), "plan": &p }));
+            act(&data, "imported", "", p.freed, 1);
+            plan = Some(p);
+        }
+        // What it left running: its startup task and its Run entry.
+        for task in ["TokkipHealthyPCStartup", "KuduStartup"] {
+            let _ = platform::run_hidden("schtasks.exe", &["/Delete", "/TN", task, "/F"]);
+        }
+        legacy_run_entries();
+        let mut uninstalled = false;
+        if let Some((program, args)) = legacy::installed() {
+            let list = args.iter().map(|a| tools::protect::ps_quote(a)).collect::<Vec<_>>().join(",");
+            let script = format!(
+                "$p = Start-Process -FilePath {} -ArgumentList {} -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
+                tools::protect::ps_quote(&program),
+                if list.is_empty() { "@()".to_string() } else { list }
+            );
+            uninstalled = platform::powershell(&script).is_some() && legacy::installed().is_none();
+            if uninstalled {
+                act(&data, "replaced", "", 0, 1);
+            }
+        }
+        Ok(Replaced { plan, uninstalled })
+    })
+    .await?
+}
+
+/// Takes out the old app's "open with Windows" entries (they point into its folder).
+#[cfg(windows)]
+fn legacy_run_entries() {
+    use winreg::enums::*;
+    let run = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    let Ok(k) = winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(run, KEY_ALL_ACCESS) else { return };
+    let names: Vec<String> = k
+        .enum_values()
+        .flatten()
+        .filter(|(_, v)| v.to_string().to_lowercase().contains(r"\program files\tokkip healthy pc\"))
+        .map(|(n, _)| n)
+        .collect();
+    for n in names {
+        let _ = k.delete_value(n);
+    }
+}
+
+#[cfg(not(windows))]
+fn legacy_run_entries() {}
 
 /// The weekly clean, run by Windows' Task Scheduler with --limpiar: no window.
 /// Cleans what's safe and needs no permission (not the Recycle Bin, not what's
@@ -1527,6 +1640,8 @@ pub fn run() {
             activity_list,
             routine_get,
             routine_set,
+            old_version,
+            old_version_replace,
             relaunch_admin,
             tokkip_notice
         ])
