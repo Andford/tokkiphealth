@@ -3,8 +3,9 @@
 
 import { useEffect, useState } from "preact/hooks";
 import {
-  defenderRun, defenderStatus, firewallFix, firewallReview, privacyList, privacySet, tracesClear, tracesList,
-  type Defender, type Firewall, type PrivacyLevel, type SwitchState, type Trace,
+  defenderRun, defenderStatus, firewallFix, firewallReview, guardIgnore, guardQuarantine, guardScan, hostsFix, privacyList, privacySet,
+  quarantineDelete, quarantineList, quarantineRestore, tracesClear, tracesList,
+  type Defender, type Firewall, type GuardFound, type GuardWhy, type PrivacyLevel, type Quarantined, type SwitchState, type Trace,
 } from "../core/api";
 import { NEEDS } from "../core/advice";
 import { bytes, count } from "../core/format";
@@ -14,10 +15,10 @@ import type { IconName } from "../ui/icons";
 import { Sound } from "../core/sound";
 import { Tokkip } from "../ui/Tokkip";
 import { AdminBanner, needsAdmin } from "../ui/AdminBanner";
-import { age } from "./storage/common";
+import { age, Busy } from "./storage/common";
 import { Working } from "../ui/Working";
 
-type Tab = "antivirus" | "privacy" | "traces" | "firewall";
+type Tab = "antivirus" | "guard" | "privacy" | "traces" | "firewall";
 let lastTab: Tab = "antivirus";
 
 /** Opens this section on a given tab next time (the dashboard\'s links). */
@@ -34,6 +35,7 @@ export function Protection() {
   };
   const tabs: [Tab, IconName, string][] = [
     ["antivirus", "shield", N_("Antivirus")],
+    ["guard", "pets", N_("Tokkip's look")],
     ["privacy", "lock", N_("Privacy")],
     ["traces", "history", N_("Traces")],
     ["firewall", "web", N_("Firewall and safety")],
@@ -50,6 +52,7 @@ export function Protection() {
         ))}
       </nav>
       {tab === "antivirus" && <Antivirus />}
+      {tab === "guard" && <Guard />}
       {tab === "privacy" && <Switches groups={["telemetry", "ads", "search", "sync", "ai", "browsers"]} />}
       {tab === "traces" && <Traces />}
       {tab === "firewall" && <FirewallTab />}
@@ -136,6 +139,234 @@ function Antivirus() {
                   <span class="file-where">{x.files[0] ?? ""}</span>
                 </span>
                 <span class={`chip ${x.active ? "warn" : "ok"}`}>{x.active ? t("Active") : t("Taken care of")}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
+
+// ── Tokkip's own look ────────────────────────────────────────────────────
+
+const WHY: Record<GuardWhy, string> = {
+  injector: N_("An unsigned program built to write into other programs, and hiding it"),
+  downloadRun: N_("A PowerShell script that downloads code and runs it straight away"),
+  encoded: N_("A hidden PowerShell command, written in Base64"),
+  amsi: N_("A script that switches off Windows' malware checks"),
+  lolbin: N_("Uses a Windows tool to fetch something from the internet"),
+  dropper: N_("A script that downloads a file, saves it and runs it"),
+  hiddenShell: N_("A shortcut that opens a hidden PowerShell or command window"),
+  doubleExtension: N_("A program dressed up as a document (two extensions)"),
+  reversedName: N_("Its name is written backwards to hide its real extension"),
+  startup: N_("A program or script that starts with Windows on its own"),
+  screensaver: N_("A screensaver: they're programs, and a common disguise"),
+};
+
+function Guard() {
+  const [found, setFound] = useState<GuardFound | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [chosen, setChosen] = useState<Set<number>>(new Set());
+  const [moved, setMoved] = useState<{ moved: number; kept: number } | null>(null);
+  const [admin, setAdmin] = useState(false);
+  const [hostsDone, setHostsDone] = useState(false);
+  const [jail, setJail] = useState<Quarantined[]>([]);
+  const loadJail = () => void quarantineList().then(setJail);
+  useEffect(loadJail, []);
+
+  const scan = async () => {
+    setBusy(true);
+    setMoved(null);
+    const f = await guardScan();
+    setFound(f);
+    setChosen(new Set(f.findings.filter((x) => x.severity === "high").map((x) => x.id)));
+    setBusy(false);
+    Sound.play(f.findings.length || f.hosts.length ? "annoyed" : "finish");
+  };
+  const quarantine = async () => {
+    if (!found) return;
+    const r = await guardQuarantine([...chosen]);
+    setFound({ ...found, findings: found.findings.filter((x) => !r.moved.includes(x.id)) });
+    setChosen(new Set());
+    setMoved({ moved: r.moved.length, kept: r.kept.length });
+    Sound.play("finish");
+    loadJail();
+  };
+  const ignore = async () => {
+    if (!found) return;
+    const ids = await guardIgnore([...chosen]);
+    setFound({ ...found, findings: found.findings.filter((x) => !ids.includes(x.id)) });
+    setChosen(new Set());
+    Sound.play("close");
+  };
+  const fixHosts = async () => {
+    try {
+      await hostsFix();
+      setHostsDone(true);
+      if (found) setFound({ ...found, hosts: [] });
+      Sound.play("finish");
+    } catch (e) {
+      if (needsAdmin(e)) setAdmin(true);
+      Sound.play("error");
+    }
+  };
+
+  const clean = found && !found.cancelled && found.findings.length === 0 && found.hosts.length === 0;
+  return (
+    <>
+      <section class={`hero card compact ${found && !clean ? "soon" : ""}`}>
+        <Tokkip size={110} state={busy ? "searching" : found && !clean ? "approval" : "idle"} dancing={!!clean} label="Tokkip" />
+        <div class="hero-text">
+          <h1 class="display">
+            {!found
+              ? t("A second look, Tokkip's way")
+              : clean
+                ? t("Tokkip found nothing strange")
+                : tn("{n} thing to look at", "{n} things to look at", found.findings.length + (found.hosts.length ? 1 : 0))}
+          </h1>
+          <p class="lead">
+            {found
+              ? tn("{n} program, script or shortcut looked at", "{n} programs, scripts and shortcuts looked at", found.looked, { n: count(found.looked) })
+              : t("Next to Defender, Tokkip looks for how malware behaves: scripts that download and run, programs dressed up as documents, shortcuts that open hidden windows. Downloads, Desktop, Documents, Temp, AppData and Startup. Nothing leaves your PC.")}
+          </p>
+          <div class="actions">
+            <button class="btn filled" disabled={busy} onClick={() => void scan()}>
+              <Icon name={found ? "refresh" : "play"} size={20} />
+              {found ? t("Look again") : t("Look now")}
+            </button>
+          </div>
+        </div>
+      </section>
+      {busy && <Busy title={t("Tokkip is looking…")} />}
+      {moved && (
+        <div class="outcome" role="status">
+          <Icon name="check" />
+          <p>
+            {tn("{n} file moved to quarantine.", "{n} files moved to quarantine.", moved.moved)}
+            {moved.kept > 0 && " " + tn("{n} was in use or changed, so it stayed.", "{n} were in use or changed, so they stayed.", moved.kept)}
+          </p>
+        </div>
+      )}
+      {admin && <AdminBanner text={t("The hosts file is Windows', so fixing it needs administrator rights.")} />}
+      {hostsDone && (
+        <div class="outcome" role="status">
+          <Icon name="check" />
+          <p>{t("The hosts file is back in order. A copy of how it was is in Tokkip's folder.")}</p>
+        </div>
+      )}
+      {found && found.hosts.length > 0 && (
+        <section class="card list-card">
+          <header class="list-head">
+            <h2 class="section-title">{t("The hosts file redirects addresses it shouldn't")}</h2>
+            <p class="hint">{t("Malware writes here to block Windows Update and antivirus, or to send you to a fake bank. If you didn't add these lines, take them out.")}</p>
+          </header>
+          <ul class="files">
+            {found.hosts.map((h) => (
+              <li key={h.line} class="file">
+                <span class="file-icon safety-caution">
+                  <Icon name="web" size={20} />
+                </span>
+                <span class="file-text">
+                  <span class="file-name">{h.host}</span>
+                  <span class="file-where">{t("goes to {to}", { to: h.to })}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div class="actions pad">
+            <button class="btn filled" onClick={() => void fixHosts()}>
+              <Icon name="build" size={20} />
+              {t("Take them out")}
+            </button>
+          </div>
+        </section>
+      )}
+      {found && found.findings.length > 0 && (
+        <section class="card list-card">
+          <header class="list-head">
+            <h2 class="section-title">{t("What Tokkip found")}</h2>
+            <p class="hint">{t("Tokkip goes by how a file behaves, so a tool you trust can show up here. Quarantine moves it where it can't run, and you can put it back; ignore it if you know it.")}</p>
+          </header>
+          <ul class="files">
+            {found.findings.map((f) => (
+              <li key={f.id} class="file">
+                <input
+                  type="checkbox"
+                  class="check"
+                  checked={chosen.has(f.id)}
+                  aria-label={f.name}
+                  onChange={() => {
+                    const n = new Set(chosen);
+                    n.has(f.id) ? n.delete(f.id) : n.add(f.id);
+                    setChosen(n);
+                  }}
+                />
+                <span class="file-text">
+                  <span class="file-name">
+                    {f.name} <span class={`chip ${f.severity === "high" ? "warn" : ""}`}>{f.severity === "high" ? t("Likely harmful") : t("Worth a look")}</span>
+                  </span>
+                  <span class="file-where">{f.why.map((w) => t(WHY[w])).join(" · ")}</span>
+                  <span class="file-where" title={f.path}>
+                    {f.path} · {bytes(f.size)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div class="actions pad">
+            <button class="btn filled" disabled={chosen.size === 0} onClick={() => void quarantine()}>
+              <Icon name="lock" size={20} />
+              {t("Move to quarantine")}
+            </button>
+            <button class="btn tonal" disabled={chosen.size === 0} onClick={() => void ignore()}>
+              <Icon name="check" size={20} />
+              {t("I know them, ignore")}
+            </button>
+          </div>
+        </section>
+      )}
+      {jail.length > 0 && (
+        <section class="card list-card">
+          <header class="list-head">
+            <h2 class="section-title">{t("Quarantine")}</h2>
+            <p class="hint">{t("Here they can't run. Put one back if it was fine, or delete it for good (that can't be undone).")}</p>
+          </header>
+          <ul class="files">
+            {jail.map((q) => (
+              <li key={q.file} class="file">
+                <span class="file-icon safety-caution">
+                  <Icon name="lock" size={20} />
+                </span>
+                <span class="file-text">
+                  <span class="file-name">{q.name}</span>
+                  <span class="file-where" title={q.original}>
+                    {age(q.at)} · {q.original}
+                  </span>
+                </span>
+                <button
+                  class="btn tonal small"
+                  onClick={async () => {
+                    try {
+                      await quarantineRestore(q.file);
+                      Sound.play("pop");
+                    } catch {
+                      Sound.play("error");
+                    }
+                    loadJail();
+                  }}
+                >
+                  {t("Put back")}
+                </button>
+                <button
+                  class="btn danger small"
+                  onClick={async () => {
+                    if (await quarantineDelete(q.file)) Sound.play("close");
+                    loadJail();
+                  }}
+                >
+                  {t("Delete for good")}
+                </button>
               </li>
             ))}
           </ul>

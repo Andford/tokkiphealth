@@ -24,6 +24,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 walkdir = "2"
 sysinfo = { version = "0.33", default-features = false, features = ["disk", "system", "network", "component"] }
+boreal = { version = "1.4", default-features = false, features = ["object", "hash", "authenticode"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

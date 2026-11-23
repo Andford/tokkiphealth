@@ -34,6 +34,8 @@ struct Found {
     programs: HashMap<u64, tools::software::Uninstall>,
     leftovers: HashMap<u64, PathBuf>,
     orphans: HashMap<u64, tools::care::OrphanKey>,
+    menu: HashMap<u64, tools::menu::MenuKey>,
+    guard: HashMap<u64, (PathBuf, fsx::Identity, Vec<String>)>,
 }
 
 struct App {
@@ -864,6 +866,180 @@ async fn defender_run(dirs: tauri::State<'_, Dirs>, what: String) -> Result<bool
     Ok(ok)
 }
 
+// ── Tokkip's own look (YARA rules and checks) ─────────────────────────────
+
+const QUARANTINE_FILE: &str = "cuarentena.json";
+const IGNORED_FILE: &str = "ignorados.json";
+
+#[tauri::command]
+async fn guard_scan(app: tauri::AppHandle, dirs: tauri::State<'_, Dirs>) -> Result<tools::scan::Found, String> {
+    let ignored: Vec<String> = store::load_json(&dirs.data, IGNORED_FILE);
+    let data = dirs.data.clone();
+    blocking(move || {
+        let state = app.state::<App>();
+        let p = progress(&app, "guard");
+        let mut kept = HashMap::new();
+        let mut found = tools::scan::scan(&tools::scan::places(), &ignored, &p, &mut |path, identity| {
+            let id = state.id();
+            kept.insert(id, (path, identity, Vec::new()));
+            id
+        });
+        for f in &found.findings {
+            if let Some(k) = kept.get_mut(&f.id) {
+                k.2 = f.why.clone();
+            }
+        }
+        state.found().guard = kept;
+        if !found.cancelled {
+            act(&data, "guard", "", 0, found.findings.len() as u64);
+        }
+        found.findings.truncate(500);
+        found
+    })
+    .await
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Moved {
+    moved: Vec<u64>,
+    /// Changed since the scan, or in use: left where they are.
+    kept: Vec<u64>,
+}
+
+/// Moves the chosen findings into quarantine (the app's folder, under a name Windows won't run).
+#[tauri::command]
+async fn guard_quarantine(app: tauri::AppHandle, dirs: tauri::State<'_, Dirs>, ids: Vec<u64>) -> Result<Moved, String> {
+    let chosen: Vec<(u64, PathBuf, fsx::Identity, Vec<String>)> = {
+        let state = app.state::<App>();
+        let found = state.found();
+        ids.iter().filter_map(|id| found.guard.get(id).map(|(p, i, w)| (*id, p.clone(), *i, w.clone()))).collect()
+    };
+    let data = dirs.data.clone();
+    blocking(move || {
+        let folder = data.join("cuarentena");
+        let _ = std::fs::create_dir_all(&folder);
+        let now = store::now_ms();
+        let mut r = Moved { moved: Vec::new(), kept: Vec::new() };
+        let mut list: Vec<tools::scan::Quarantined> = store::load_json(&data, QUARANTINE_FILE);
+        let mut bytes = 0;
+        for (i, (id, path, identity, why)) in chosen.into_iter().enumerate() {
+            let to = folder.join(format!("{now}-{i}.cuarentena"));
+            if fsx::identity(&path) != Some(identity) || tools::scan::move_file(&path, &to).is_err() {
+                r.kept.push(id);
+                continue;
+            }
+            bytes += identity.len;
+            list.push(tools::scan::Quarantined {
+                file: to.display().to_string(),
+                original: path.display().to_string(),
+                name: path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                size: identity.len,
+                at: now,
+                why,
+            });
+            r.moved.push(id);
+        }
+        store::save_json(&data, QUARANTINE_FILE, &list);
+        if !r.moved.is_empty() {
+            act(&data, "quarantine", "", bytes, r.moved.len() as u64);
+        }
+        r
+    })
+    .await
+}
+
+/// Leaves these files out of the next looks (by their content: a changed file is looked at again).
+#[tauri::command]
+async fn guard_ignore(app: tauri::AppHandle, dirs: tauri::State<'_, Dirs>, ids: Vec<u64>) -> Result<Vec<u64>, String> {
+    let chosen: Vec<(u64, PathBuf)> = {
+        let state = app.state::<App>();
+        let found = state.found();
+        ids.iter().filter_map(|id| found.guard.get(id).map(|(p, _, _)| (*id, p.clone()))).collect()
+    };
+    let data = dirs.data.clone();
+    blocking(move || {
+        let mut list: Vec<String> = store::load_json(&data, IGNORED_FILE);
+        let mut done = Vec::new();
+        for (id, path) in chosen {
+            if let Ok(bytes) = std::fs::read(&path) {
+                let hash = blake3::hash(&bytes).to_hex().to_string();
+                if !list.contains(&hash) {
+                    list.push(hash);
+                }
+                done.push(id);
+            }
+        }
+        store::save_json(&data, IGNORED_FILE, &list);
+        done
+    })
+    .await
+}
+
+#[tauri::command]
+fn quarantine_list(dirs: tauri::State<Dirs>) -> Vec<tools::scan::Quarantined> {
+    let mut list: Vec<tools::scan::Quarantined> = store::load_json(&dirs.data, QUARANTINE_FILE);
+    list.retain(|q| std::path::Path::new(&q.file).exists());
+    list.reverse();
+    list
+}
+
+/// Puts a quarantined file back where it was ("taken" if something else is there now).
+#[tauri::command]
+async fn quarantine_restore(dirs: tauri::State<'_, Dirs>, file: String) -> Result<(), String> {
+    let data = dirs.data.clone();
+    blocking(move || {
+        let mut list: Vec<tools::scan::Quarantined> = store::load_json(&data, QUARANTINE_FILE);
+        let q = list.iter().find(|q| q.file == file).cloned().ok_or("unknown")?;
+        tools::scan::restore(&q)?;
+        list.retain(|x| x.file != file);
+        store::save_json(&data, QUARANTINE_FILE, &list);
+        Ok(())
+    })
+    .await?
+}
+
+/// Deletes a quarantined file for good (the page says so first).
+#[tauri::command]
+async fn quarantine_delete(dirs: tauri::State<'_, Dirs>, file: String) -> Result<bool, String> {
+    let data = dirs.data.clone();
+    blocking(move || {
+        let mut list: Vec<tools::scan::Quarantined> = store::load_json(&data, QUARANTINE_FILE);
+        if !list.iter().any(|q| q.file == file) {
+            return false;
+        }
+        let ok = std::fs::remove_file(&file).is_ok() || !std::path::Path::new(&file).exists();
+        if ok {
+            list.retain(|x| x.file != file);
+            store::save_json(&data, QUARANTINE_FILE, &list);
+        }
+        ok
+    })
+    .await
+}
+
+/// Takes the redirecting lines out of the hosts file, after a copy in the app's folder.
+#[tauri::command]
+async fn hosts_fix(dirs: tauri::State<'_, Dirs>) -> Result<u64, String> {
+    if !platform::is_elevated() {
+        return Err("admin".into());
+    }
+    let data = dirs.data.clone();
+    blocking(move || {
+        let path = tools::scan::hosts_path();
+        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let bad = tools::scan::hosts_tampering(&text);
+        if bad.is_empty() {
+            return Ok(0);
+        }
+        std::fs::write(data.join(format!("hosts-{}.bak", store::now_ms())), &text).map_err(|e| e.to_string())?;
+        std::fs::write(&path, tools::scan::hosts_without(&text, &bad)).map_err(|e| e.to_string())?;
+        act(&data, "hosts", "", 0, bad.len() as u64);
+        Ok(bad.len() as u64)
+    })
+    .await?
+}
+
 #[tauri::command]
 async fn firewall_review() -> Result<tools::protect::Firewall, String> {
     blocking(|| {
@@ -946,6 +1122,88 @@ async fn registry_fix(app: tauri::AppHandle, dirs: tauri::State<'_, Dirs>, ids: 
         }
         if !done.is_empty() {
             act(&data, "registry", "", 0, done.len() as u64);
+        }
+        done
+    })
+    .await
+}
+
+// ── Menú contextual ───────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn menu_scan(app: tauri::AppHandle) -> Result<Vec<tools::menu::MenuEntry>, String> {
+    blocking(move || {
+        let state = app.state::<App>();
+        let mut kept = HashMap::new();
+        let list = tools::menu::scan(&mut |k| {
+            let id = state.id();
+            kept.insert(id, k);
+            id
+        });
+        state.found().menu = kept;
+        list
+    })
+    .await
+}
+
+/// Switches a right-click entry off or on. Windows' own entries are never changed.
+#[tauri::command]
+async fn menu_set(app: tauri::AppHandle, id: u64, on: bool) -> Result<(), String> {
+    let key = app.state::<App>().found().menu.get(&id).cloned().ok_or("unknown")?;
+    if key.machine && !platform::is_elevated() {
+        return Err("admin".into());
+    }
+    if key.verb && tools::menu::is_protected_verb(&key.name)
+        || !key.verb && tools::menu::clsid_in(&key.name).is_some_and(|c| tools::menu::is_protected_clsid(&c))
+    {
+        return Err("protected".into());
+    }
+    let handle = app.clone();
+    blocking(move || {
+        tools::menu::set(&key, on)?;
+        // A handler is renamed when switched: keep the new name for the next change.
+        let mut next = key.clone();
+        next.enabled = on;
+        if !key.verb {
+            next.name = key.handler_name(on);
+        }
+        handle.state::<App>().found().menu.insert(id, next);
+        Ok(())
+    })
+    .await?
+}
+
+/// Backs up each chosen entry to a .reg file (restorable from Maintenance → Registry), then removes it.
+#[tauri::command]
+async fn menu_remove(app: tauri::AppHandle, dirs: tauri::State<'_, Dirs>, ids: Vec<u64>) -> Result<Vec<u64>, String> {
+    let chosen: Vec<(u64, tools::menu::MenuKey)> = {
+        let state = app.state::<App>();
+        let found = state.found();
+        ids.iter().filter_map(|id| found.menu.get(id).map(|k| (*id, k.clone()))).collect()
+    };
+    if chosen.iter().any(|(_, k)| k.machine) && !platform::is_elevated() {
+        return Err("admin".into());
+    }
+    let data = dirs.data.clone();
+    blocking(move || {
+        let folder = data.join("registro");
+        let _ = std::fs::create_dir_all(&folder);
+        let now = store::now_ms();
+        let mut done = Vec::new();
+        for (i, (id, k)) in chosen.iter().enumerate() {
+            if k.verb && tools::menu::is_protected_verb(&k.name) {
+                continue;
+            }
+            let file = folder.join(format!("{now}-menu-{i}.reg"));
+            if tools::menu::remove(k, &file).is_ok() {
+                done.push(*id);
+                let mut list: Vec<tools::care::Backup> = store::load_json(&data, BACKUPS_FILE);
+                list.push(tools::care::Backup { at: now, file: file.display().to_string(), entries: 1 });
+                store::save_json(&data, BACKUPS_FILE, &list);
+            }
+        }
+        if !done.is_empty() {
+            act(&data, "menu", "", 0, done.len() as u64);
         }
         done
     })
@@ -1244,12 +1502,22 @@ pub fn run() {
             traces_clear,
             defender_status,
             defender_run,
+            guard_scan,
+            guard_quarantine,
+            guard_ignore,
+            quarantine_list,
+            quarantine_restore,
+            quarantine_delete,
+            hosts_fix,
             firewall_review,
             firewall_fix,
             registry_scan,
             registry_fix,
             registry_backups,
             registry_restore,
+            menu_scan,
+            menu_set,
+            menu_remove,
             repair_run,
             restore_points,
             restore_point_create,

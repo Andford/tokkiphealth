@@ -950,6 +950,83 @@ export async function firewallFix(what: "on" | "rules", rules: string[] = []): P
   return invoke<boolean>("firewall_fix", { what, rules });
 }
 
+// ── Tokkip's own look ────────────────────────────────────────────────────
+
+export type GuardWhy =
+  | "injector" | "downloadRun" | "encoded" | "amsi" | "lolbin" | "dropper" | "hiddenShell"
+  | "doubleExtension" | "reversedName" | "startup" | "screensaver";
+export interface Finding {
+  id: number;
+  path: string;
+  name: string;
+  size: number;
+  severity: "medium" | "high";
+  why: GuardWhy[];
+}
+export interface HostsLine {
+  line: string;
+  host: string;
+  to: string;
+}
+export interface GuardFound {
+  findings: Finding[];
+  hosts: HostsLine[];
+  looked: number;
+  skipped: number;
+  cancelled: boolean;
+}
+export async function guardScan(): Promise<GuardFound> {
+  if (!inApp) {
+    await wait(2200);
+    return {
+      findings: [
+        { id: 900, path: "C:\\Users\\Andy\\Downloads\\Factura_Noviembre.pdf.exe", name: "Factura_Noviembre.pdf.exe", size: 812_000, severity: "high", why: ["doubleExtension"] },
+        { id: 901, path: "C:\\Users\\Andy\\AppData\\Roaming\\upd\\run.ps1", name: "run.ps1", size: 2_100, severity: "high", why: ["downloadRun", "encoded"] },
+        { id: 902, path: "C:\\Users\\Andy\\Desktop\\fondo_bonito.scr", name: "fondo_bonito.scr", size: 1_400_000, severity: "medium", why: ["screensaver"] },
+      ],
+      hosts: [{ line: "0.0.0.0 download.windowsupdate.com", host: "download.windowsupdate.com", to: "0.0.0.0" }],
+      looked: 4127,
+      skipped: 3,
+      cancelled: false,
+    };
+  }
+  return invoke<GuardFound>("guard_scan");
+}
+export async function guardQuarantine(ids: number[]): Promise<{ moved: number[]; kept: number[] }> {
+  if (!inApp) return { moved: ids, kept: [] };
+  return invoke("guard_quarantine", { ids });
+}
+export async function guardIgnore(ids: number[]): Promise<number[]> {
+  if (!inApp) return ids;
+  return invoke<number[]>("guard_ignore", { ids });
+}
+export interface Quarantined {
+  file: string;
+  original: string;
+  name: string;
+  size: number;
+  at: number;
+  why: GuardWhy[];
+}
+export async function quarantineList(): Promise<Quarantined[]> {
+  if (!inApp) return [{ file: "q1", original: "C:\\Users\\Andy\\Downloads\\crack.exe", name: "crack.exe", size: 3_200_000, at: Date.now() - 5 * 86_400_000, why: ["injector"] }];
+  return invoke<Quarantined[]>("quarantine_list");
+}
+/** Throws "taken" when another file is where it was. */
+export async function quarantineRestore(file: string): Promise<void> {
+  if (!inApp) return;
+  return invoke<void>("quarantine_restore", { file });
+}
+export async function quarantineDelete(file: string): Promise<boolean> {
+  if (!inApp) return true;
+  return invoke<boolean>("quarantine_delete", { file });
+}
+/** Throws "admin" without administrator rights. Returns the lines taken out. */
+export async function hostsFix(): Promise<number> {
+  if (!inApp) throw "admin";
+  return invoke<number>("hosts_fix");
+}
+
 // ── Mantenimiento ────────────────────────────────────────────────────────
 
 export interface Orphan {
@@ -975,6 +1052,45 @@ export async function registryFix(ids: number[]): Promise<number[]> {
   if (!inApp) return ids.filter((i) => i === 702);
   return invoke<number[]>("registry_fix", { ids });
 }
+// ── Menú contextual ──────────────────────────────────────────────────────
+
+export type MenuScope = "files" | "folders" | "background" | "folder" | "drives" | "everything";
+export interface MenuEntry {
+  id: number;
+  kind: "verb" | "handler";
+  label: string;
+  scope: MenuScope;
+  machine: boolean;
+  target: string | null;
+  broken: boolean;
+  enabled: boolean;
+  protected: boolean;
+}
+export async function menuScan(): Promise<MenuEntry[]> {
+  if (!inApp) {
+    await wait(700);
+    return [
+      { id: 800, kind: "verb", label: "Abrir con Code", scope: "files", machine: false, target: "C:\\Users\\Andy\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe", broken: false, enabled: true, protected: false },
+      { id: 801, kind: "handler", label: "7-Zip", scope: "files", machine: true, target: "C:\\Program Files\\7-Zip\\7-zip.dll", broken: false, enabled: true, protected: false },
+      { id: 802, kind: "verb", label: "Escanear con Viejo Antivirus", scope: "files", machine: true, target: "C:\\Program Files\\ViejoAV\\scan.exe", broken: true, enabled: true, protected: false },
+      { id: 803, kind: "handler", label: "Compartir con Viejo Drive", scope: "folders", machine: false, target: "C:\\Users\\Andy\\AppData\\Local\\ViejoDrive\\shell.dll", broken: true, enabled: true, protected: false },
+      { id: 804, kind: "verb", label: "Git Bash aquí", scope: "background", machine: true, target: "C:\\Program Files\\Git\\git-bash.exe", broken: false, enabled: false, protected: false },
+      { id: 805, kind: "handler", label: "Enviar a", scope: "everything", machine: true, target: "C:\\Windows\\System32\\shell32.dll", broken: false, enabled: true, protected: true },
+    ];
+  }
+  return invoke<MenuEntry[]>("menu_scan");
+}
+/** Throws "admin" when the entry is for everyone on this PC. */
+export async function menuSet(id: number, on: boolean): Promise<void> {
+  if (!inApp) return;
+  return invoke<void>("menu_set", { id, on });
+}
+/** Backs up and removes; throws "admin" when some need administrator rights. */
+export async function menuRemove(ids: number[]): Promise<number[]> {
+  if (!inApp) return ids;
+  return invoke<number[]>("menu_remove", { ids });
+}
+
 export interface Backup {
   at: number;
   file: string;

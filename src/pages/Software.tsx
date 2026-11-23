@@ -3,8 +3,8 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 import {
-  driversInstall, driversScan, preinstalledList, programsList, relaunchAdmin, removeLeftovers, removePreinstalled, startupList, startupSet, uninstall, updateRun, updatesList,
-  type DriverPriority, type DriversDone, type DriverUpdate, type Leftover, type Preinstalled, type Program, type Removed, type StartupItem, type Update,
+  driversInstall, driversScan, menuRemove, menuScan, menuSet, preinstalledList, programsList, relaunchAdmin, removeLeftovers, removePreinstalled, startupList, startupSet, uninstall, updateRun, updatesList,
+  type DriverPriority, type DriversDone, type DriverUpdate, type Leftover, type MenuEntry, type MenuScope, type Preinstalled, type Program, type Removed, type StartupItem, type Update,
 } from "../core/api";
 import { bytes } from "../core/format";
 import { language, N_, t, tn } from "../i18n/i18n";
@@ -16,7 +16,7 @@ import { AdminBanner, needsAdmin } from "../ui/AdminBanner";
 import { Sound } from "../core/sound";
 import { Working } from "../ui/Working";
 
-type Tab = "startup" | "programs" | "preinstalled" | "updates" | "drivers";
+type Tab = "startup" | "programs" | "preinstalled" | "menu" | "updates" | "drivers";
 let lastTab: Tab = "startup";
 
 /** Opens this section on a given tab next time (the dashboard\'s links). */
@@ -47,6 +47,10 @@ export function Software() {
           <Icon name="installer" size={20} />
           {t("Preinstalled apps")}
         </button>
+        <button role="tab" aria-selected={tab === "menu"} onClick={() => go("menu")}>
+          <Icon name="file" size={20} />
+          {t("Right-click menu")}
+        </button>
         <button role="tab" aria-selected={tab === "updates"} onClick={() => go("updates")}>
           <Icon name="refresh" size={20} />
           {t("Updates")}
@@ -59,6 +63,7 @@ export function Software() {
       {tab === "startup" && <Startup />}
       {tab === "programs" && <Programs />}
       {tab === "preinstalled" && <PreinstalledApps />}
+      {tab === "menu" && <RightClickMenu />}
       {tab === "updates" && <Updates />}
       {tab === "drivers" && <Drivers />}
     </>
@@ -121,6 +126,153 @@ function Startup() {
           ))}
         </ul>
       </section>
+    </>
+  );
+}
+
+// ── Right-click menu ─────────────────────────────────────────────────────
+
+const SCOPES: Record<MenuScope, string> = {
+  files: N_("Files"),
+  folders: N_("Folders"),
+  background: N_("Inside a folder"),
+  folder: N_("Folders and libraries"),
+  drives: N_("Drives"),
+  everything: N_("Files and folders"),
+};
+
+function RightClickMenu() {
+  const [list, setList] = useState<MenuEntry[] | null>(null);
+  const [all, setAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  const [done, setDone] = useState<number | null>(null);
+  const [chosen, setChosen] = useState<Set<number>>(new Set());
+  const load = async () => {
+    const l = await menuScan();
+    setList(l);
+    setChosen(new Set(l.filter((e) => e.broken && !e.protected).map((e) => e.id)));
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  if (!list) return <Working text={t("Looking…")} />;
+
+  const broken = list.filter((e) => e.broken && !e.protected);
+  const shown = (all ? list : broken).slice().sort((a, b) => Number(b.broken) - Number(a.broken) || a.label.localeCompare(b.label));
+  const flip = async (e: MenuEntry) => {
+    try {
+      await menuSet(e.id, !e.enabled);
+      setList(list.map((x) => (x.id === e.id ? { ...x, enabled: !x.enabled } : x)));
+      Sound.play(e.enabled ? "close" : "pop");
+    } catch (err) {
+      if (needsAdmin(err)) setAdmin(true);
+      Sound.play("error");
+    }
+  };
+  const remove = async () => {
+    setBusy(true);
+    try {
+      const ids = await menuRemove([...chosen]);
+      setList(list.filter((e) => !ids.includes(e.id)));
+      setChosen(new Set());
+      setDone(ids.length);
+      Sound.play("finish");
+    } catch (err) {
+      if (needsAdmin(err)) setAdmin(true);
+      Sound.play("error");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <section class="card tool-head">
+        <div>
+          <h2 class="section-title">
+            {broken.length > 0
+              ? tn("{n} broken right-click entry", "{n} broken right-click entries", broken.length)
+              : t("Your right-click menu is in order")}
+          </h2>
+          <p class="hint">
+            {t("What programs added to the right-click menu. Broken ones point at a program that's gone: they can be removed, with a backup you can put back from Maintenance. Any other one can be switched off and on again, the way Windows does it. On Windows 11 they're under \"Show more options\".")}
+          </p>
+        </div>
+        <button class="btn tonal" disabled={busy} onClick={() => void load()}>
+          <Icon name="refresh" size={20} />
+          {t("Look again")}
+        </button>
+      </section>
+      {admin && <AdminBanner text={t("That entry is for everyone on this PC, so changing it needs administrator rights.")} />}
+      {done != null && (
+        <div class="outcome" role="status">
+          <Icon name="check" />
+          <p>{tn("{n} entry removed and backed up.", "{n} entries removed and backed up.", done)}</p>
+        </div>
+      )}
+      <div class="segmented" role="radiogroup" aria-label={t("Right-click menu")}>
+        {([[false, t("Broken"), broken.length], [true, t("All"), list.length]] as const).map(([value, label, n]) => (
+          <button key={label} role="radio" aria-checked={all === value} onClick={() => setAll(value)}>
+            {all === value && <Icon name="check" size={18} />}
+            {label} · {n}
+          </button>
+        ))}
+      </div>
+      {shown.length === 0 ? (
+        <section class="card empty-state">
+          <Tokkip size={96} state="idle" dancing label="Tokkip" />
+          <h2>{t("Nothing broken")}</h2>
+          <p class="hint">{t("Every entry still has its program.")}</p>
+        </section>
+      ) : (
+        <section class="card list-card">
+          <ul class="files">
+            {shown.map((e) => (
+              <li key={e.id} class="file">
+                {e.broken && !e.protected ? (
+                  <input
+                    type="checkbox"
+                    class="check"
+                    checked={chosen.has(e.id)}
+                    aria-label={e.label}
+                    onChange={() => {
+                      const n = new Set(chosen);
+                      n.has(e.id) ? n.delete(e.id) : n.add(e.id);
+                      setChosen(n);
+                    }}
+                  />
+                ) : (
+                  <span class="file-icon">
+                    <Icon name={e.kind === "verb" ? "app" : "archive"} size={20} />
+                  </span>
+                )}
+                <span class="file-text">
+                  <span class="file-name">
+                    {e.label} {e.broken && <span class="chip warn">{t("Broken")}</span>}
+                    {e.protected && <span class="chip">{t("Windows")}</span>}
+                    {e.machine && !e.protected && <span class="chip">{t("Everyone")}</span>}
+                  </span>
+                  <span class="file-where" title={e.target ?? ""}>
+                    {t(SCOPES[e.scope])}
+                    {e.target ? ` · ${e.target}` : ""}
+                  </span>
+                </span>
+                {!e.protected && (
+                  <input type="checkbox" class="switch" checked={e.enabled} aria-label={e.label} onChange={() => void flip(e)} />
+                )}
+              </li>
+            ))}
+          </ul>
+          {broken.length > 0 && (
+            <div class="actions pad">
+              <button class="btn filled" disabled={chosen.size === 0 || busy} onClick={remove}>
+                <Icon name="build" size={20} />
+                {t("Back up and remove")}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
     </>
   );
 }

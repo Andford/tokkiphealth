@@ -3,13 +3,15 @@
 - **Material Symbols Rounded** (icons, `src/ui/icons.ts`), by Google — Apache License 2.0.
 - **Roboto Flex** (text) and **Fredoka** (titles), via Fontsource — SIL Open Font License 1.1.
 - **material-color-utilities** (the colour scheme), by Google — Apache License 2.0.
+- **boreal** (runs our YARA rules, `rules/yara/tokkip.yar`, which are ours), by Vincent Thiberville — MIT or Apache 2.0.
 - **Preact** — MIT. **Tauri** — MIT or Apache 2.0. The Rust crates listed in `src-tauri/Cargo.toml` — under their own licenses (MIT or Apache 2.0).
 
 ## Kudu
 
 Several tools follow Kudu's (the folders never to touch, the checks before
 deleting, the duplicate finder's rules, the shredder's safeguards, the
-Downloads review, the driver updates through Windows Update): rewritten here
+Downloads review, the driver updates through Windows Update, the right-click
+menu's places and protected entries, the malware heuristics' ideas): rewritten here
 in Rust, with credit in each file.
 
 ```

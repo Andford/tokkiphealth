@@ -317,10 +317,14 @@ const DONE_TEXT: Record<string, [IconName, string]> = {
   service: ["settings", N_("Changed the service {detail}")],
   game: ["play", N_("Turned on game mode")],
   registry: ["build", N_("Removed {count} registry entries (backed up)")],
+  menu: ["file", N_("Removed {count} right-click entries (backed up)")],
   privacy: ["lock", N_("Changed a privacy setting")],
   traces: ["history", N_("Cleared {count} traces")],
   firewall: ["web", N_("Adjusted the firewall")],
   scan: ["shield", N_("Ran a quick scan with Defender")],
+  guard: ["pets", N_("Tokkip looked for malware ({count} to look at)")],
+  quarantine: ["lock", N_("Moved {count} files to quarantine")],
+  hosts: ["web", N_("Put the hosts file back in order")],
   repair: ["build", N_("Ran a Windows repair ({detail})")],
   restorePoint: ["history", N_("Made a restore point")],
   drivers: ["refresh", N_("Updated {count} drivers")],
@@ -464,8 +468,8 @@ function Activity() {
 
 const DONE_SHORT: Record<string, string> = {
   clean: N_("Cleans"), routine: N_("Weekly cleans"), trash: N_("To the Recycle Bin"), shred: N_("Shredded"), empty: N_("Empty folders"),
-  uninstall: N_("Uninstalls"), apps: N_("Preinstalled apps"), service: N_("Services"), registry: N_("Registry"), privacy: N_("Privacy"),
-  traces: N_("Traces"), firewall: N_("Firewall"), scan: N_("Defender scans"), repair: N_("Windows repairs"), restorePoint: N_("Restore points"),
+  uninstall: N_("Uninstalls"), apps: N_("Preinstalled apps"), service: N_("Services"), registry: N_("Registry"), menu: N_("Right-click menu"), privacy: N_("Privacy"),
+  traces: N_("Traces"), firewall: N_("Firewall"), scan: N_("Defender scans"), guard: N_("Tokkip's look"), quarantine: N_("Quarantine"), hosts: N_("Hosts file"), repair: N_("Windows repairs"), restorePoint: N_("Restore points"),
   routineSet: N_("Weekly clean"), game: N_("Game mode"), drivers: N_("Drivers"),
 };
 
